@@ -2023,6 +2023,7 @@ async function desenharCard(){
   if (c.tipo === "h2h") return desenharH2H();
   if (c.tipo === "quentes") return desenharQuentes();
   if (c.tipo === "jogador") return desenharJogador();
+  if (c.tipo === "arbitro") return desenharArbitro();
   if (c.formato === "sticker") return desenharSticker();
   const W = 1080, H = c.formato === "story" ? 1920 : 1350;
   const cv = document.getElementById("cardCanvas");
@@ -2645,12 +2646,125 @@ async function desenharJogador(){
   x.textAlign = "center";
 }
 
+async function desenharArbitro(){
+  const c = state.card;
+  const UI = "-apple-system, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif";
+  const MONO = "'SF Mono', 'Roboto Mono', Menlo, monospace";
+  const W = 1080, cx = W / 2;
+  const n = c.jogos.length;
+  const temSplit = c.amarelosCasa != null && c.amarelosFora != null;
+
+  const oHeader = 96, oSub = 200, oCtx = 242, oNum = 372, oLbl = 448;
+  const oSplitLbl = temSplit ? 520 : 0, oSplit = temSplit ? 566 : 0;
+  const ex0 = (temSplit ? 650 : 530), exStep = 46;
+  const oFooter = ex0 + n * exStep + (n ? 14 : -20), panelH = oFooter + 42;
+
+  const sticker = c.formato === "sticker";
+  const H = sticker ? panelH + 48 : (c.formato === "story" ? 1920 : 1350);
+  const cv = document.getElementById("cardCanvas");
+  if (!cv) return;
+  cv.width = W; cv.height = H;
+  const x = cv.getContext("2d");
+  x.clearRect(0, 0, W, H);
+
+  if (!sticker){
+    const g = x.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#0D1712"); g.addColorStop(0.5, "#0A0F0C"); g.addColorStop(1, "#07100B");
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+    const glow = x.createRadialGradient(W/2, H*0.3, 60, W/2, H*0.3, W*0.8);
+    glow.addColorStop(0, "rgba(240,177,74,0.12)"); glow.addColorStop(1, "rgba(240,177,74,0)");
+    x.fillStyle = glow; x.fillRect(0, 0, W, H);
+  }
+
+  const px = 24, pw = W - 48;
+  const py = sticker ? 24 : Math.max(24, Math.round((H - panelH) / 2));
+  x.fillStyle = "rgba(8,13,10,0.92)";
+  x.beginPath(); x.roundRect(px, py, pw, panelH, 44); x.fill();
+  x.strokeStyle = "rgba(240,177,74,0.45)"; x.lineWidth = 3;
+  x.beginPath(); x.roundRect(px, py, pw, panelH, 44); x.stroke();
+  const Y = o => py + o;
+  x.textAlign = "center"; x.textBaseline = "middle";
+
+  // header: emoji + nome
+  {
+    const yT = Y(oHeader);
+    x.font = `800 44px ${UI}`;
+    let nome = c.nome;
+    while (x.measureText("👨‍⚖️  " + nome).width > pw - 100 && nome.length > 8) nome = nome.slice(0, -1);
+    x.fillStyle = "#EAF2EC";
+    x.fillText("👨‍⚖️  " + (nome === c.nome ? nome : nome + "…"), cx, yT);
+  }
+  x.font = `700 26px ${MONO}`; x.fillStyle = "#F0B14A";
+  x.fillText("PERFIL DO ÁRBITRO", cx, Y(oSub));
+  x.font = `500 22px ${MONO}`; x.fillStyle = "#93A399";
+  x.fillText(c.contexto, cx, Y(oCtx));
+
+  // números grandes: amarelos (âmbar) | faltas (verde)
+  const off = 250;
+  x.font = `800 116px ${UI}`;
+  x.fillStyle = "#F0B14A"; x.fillText(fmt(c.amarelos), cx - off, Y(oNum));
+  x.fillStyle = "#2FD08A"; x.fillText(fmt(c.faltas), cx + off, Y(oNum));
+  x.font = `700 22px ${MONO}`; x.fillStyle = "#93A399";
+  x.fillText("🟨 AMARELOS / JOGO", cx - off, Y(oLbl));
+  x.fillText("FALTAS / JOGO", cx + off, Y(oLbl));
+
+  // split casa × fora
+  if (temSplit){
+    x.font = `500 22px ${MONO}`; x.fillStyle = "#64756B";
+    x.fillText("amarelos: mandante × visitante", cx, Y(oSplitLbl));
+    const bw = 300, bh = 16, max = Math.max(c.amarelosCasa, c.amarelosFora, 0.001);
+    x.fillStyle = "rgba(255,255,255,0.10)";
+    x.beginPath(); x.roundRect(cx - 40 - bw, Y(oSplit) - bh/2, bw, bh, 8); x.fill();
+    x.beginPath(); x.roundRect(cx + 40, Y(oSplit) - bh/2, bw, bh, 8); x.fill();
+    x.fillStyle = "#2FD08A";
+    const wC = bw * (c.amarelosCasa / max);
+    x.beginPath(); x.roundRect(cx - 40 - wC, Y(oSplit) - bh/2, wC, bh, 8); x.fill();
+    x.fillStyle = "#F0B14A";
+    x.beginPath(); x.roundRect(cx + 40, Y(oSplit) - bh/2, bw * (c.amarelosFora / max), bh, 8); x.fill();
+    x.font = `800 28px ${MONO}`;
+    x.fillStyle = "#2FD08A"; x.textAlign = "right"; x.fillText(fmt(c.amarelosCasa), cx - 52 - bw, Y(oSplit));
+    x.fillStyle = "#F0B14A"; x.textAlign = "left"; x.fillText(fmt(c.amarelosFora), cx + 52 + bw, Y(oSplit));
+    x.textAlign = "center";
+  }
+
+  // extrato: 🟨N · jogo · data
+  const dataBR = ts => { const [y,m,d] = ts.split("-"); return `${d}/${m}`; };
+  c.jogos.forEach((g, i) => {
+    const y = Y(ex0 + i * exStep);
+    const numTxt = `${g.am}🟨${g.vm ? " " + g.vm + "🟥" : ""}`;
+    let jogo = g.jogo;
+    x.font = `500 25px ${UI}`;
+    while (x.measureText(jogo).width > 560 && jogo.length > 10) jogo = jogo.slice(0, -1);
+    const meio = `  ${jogo === g.jogo ? jogo : jogo + "…"}`;
+    const fim = `  · ${dataBR(g.ts)} · ${g.faltas} faltas`;
+    x.font = `800 27px ${UI}`; const wN = x.measureText(numTxt).width;
+    x.font = `500 25px ${UI}`; const wM = x.measureText(meio).width;
+    x.font = `500 21px ${MONO}`; const wF = x.measureText(fim).width;
+    let cur = cx - (wN + wM + wF) / 2;
+    x.textAlign = "left";
+    x.font = `800 27px ${UI}`; x.fillStyle = "#F0B14A"; x.fillText(numTxt, cur, y); cur += wN;
+    x.font = `500 25px ${UI}`; x.fillStyle = "#EAF2EC"; x.fillText(meio, cur, y); cur += wM;
+    x.font = `500 21px ${MONO}`; x.fillStyle = "#64756B"; x.fillText(fim, cur, y);
+    x.textAlign = "center";
+  });
+
+  // rodapé
+  const yRod = Y(oFooter);
+  x.textAlign = "right"; x.font = `800 26px ${UI}`;
+  const wEx = x.measureText("!").width;
+  x.fillStyle = "#2FD08A"; x.fillText("!", px+pw-40, yRod);
+  x.fillStyle = "#FFFFFF"; x.fillText("APITOU", px+pw-40-wEx, yRod);
+  x.textAlign = "left"; x.font = `500 22px ${MONO}`; x.fillStyle = "#93A399";
+  x.fillText("os números falam · mercado de cartões", px+40, yRod);
+  x.textAlign = "center";
+}
+
 function baixarCard(){
   const cv = document.getElementById("cardCanvas");
   const c = state.card;
-  const nome = (c.tipo === "jogador"
-    ? `semchutes-${c.nome}-${c.label}`
-    : `semchutes-${c.fx.home}-x-${c.fx.away}-${c.label}`).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const nome = ((c.tipo === "jogador" || c.tipo === "arbitro")
+    ? `apitou-${c.nome}-${c.label}`
+    : `apitou-${c.fx.home}-x-${c.fx.away}-${c.label}`).toLowerCase().replace(/[^a-z0-9]+/g, "-");
   cv.toBlob(blob => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -3260,22 +3374,50 @@ function escalacoesCorpo(fx, fi){
 }
 
 /* ---------- PERFIL DO ÁRBITRO (mercado de cartões) ---------- */
+function setArbJanela(n){ state.arbJanela = n; render(); }
+/* métricas do árbitro sob a janela ativa (5/10/15/30 jogos ou base completa) */
+function arbView(arb){
+  const jan = state.arbJanela ?? 10;
+  const ult = arb.ultimos || [];
+  if (jan !== "base" && ult.length >= 3){
+    const jogos = ult.slice(0, jan);
+    const n = jogos.length;
+    const med = sel => Math.round(jogos.reduce((a, g) => a + sel(g), 0) / n * 100) / 100;
+    return { janela: `últimos ${n} jogos`, n, jogos,
+             amarelos: med(g => g.am), faltas: med(g => g.faltas), vermelhos: med(g => g.vm),
+             amarelosCasa: med(g => g.amC), amarelosFora: med(g => g.amF),
+             penaltis: null, varm: null };
+  }
+  return { janela: `base completa (${arb.jogos || "?"} jogos)`, n: arb.jogos, jogos: ult,
+           amarelos: arb.amarelos, faltas: arb.faltas, vermelhos: arb.vermelhos,
+           amarelosCasa: arb.amarelosCasa, amarelosFora: arb.amarelosFora,
+           penaltis: arb.penaltis, varm: arb.var };
+}
 function renderArbitro(){
   const fi = state.jogoAberto ?? 0;
   const fx = FIXTURES[fi];
   const arb = fx ? (SEM.arbitros || {})[String(fx.id)] : null;
   if (!arb){ go('jogo', null, null, null, fi); return; }
-  const nb = v => v != null ? String(v).replace(".", ",") : "—";
-  const tile = (k, v, cls="") => `<div class="tile ${cls}"><div class="k">${k}</div><div class="big tnum" style="font-size:34px">${v}</div></div>`;
+  const v = arbView(arb);
+  const nb = x => x != null ? String(x).replace(".", ",") : "—";
+  const tile = (k, val, cls="") => `<div class="tile ${cls}"><div class="k">${k}</div><div class="big tnum" style="font-size:34px">${val}</div></div>`;
+  const jan = state.arbJanela ?? 10;
+  const temUlt = (arb.ultimos || []).length >= 3;
+  const chip = (n, txt) => `<button class="chip ${jan===n?'on':''}" onclick="setArbJanela(${typeof n==='string'?`'${n}'`:n})">${txt}</button>`;
+  const filtros = temUlt ? `
+    <div class="jogo-filtros" style="margin-top:16px">
+      <div class="qlabel">Quantos jogos contar?</div>
+      <div class="filters">${chip(5,"Últimos 5")}${chip(10,"Últimos 10")}${chip(15,"Últimos 15")}${chip(30,"Últimos 30")}${chip("base","Base completa")}</div>
+    </div>` : "";
 
-  // split casa × fora dos amarelos (a leitura que o apostador de cartões quer)
+  // split casa × fora (reage à janela)
   let splitHTML = "";
-  if (arb.amarelosCasa != null && arb.amarelosFora != null){
-    const c = arb.amarelosCasa, f = arb.amarelosFora, max = Math.max(c, f, 0.001);
+  if (v.amarelosCasa != null && v.amarelosFora != null){
+    const c = v.amarelosCasa, f = v.amarelosFora, max = Math.max(c, f, 0.001);
     const vies = f > c * 1.15 ? "tende a dar MAIS cartão pro visitante" : c > f * 1.15 ? "tende a dar MAIS cartão pro mandante" : "equilibrado entre mandante e visitante";
     splitHTML = `
       <div class="rx-card" style="margin-top:18px">
-        <div class="rx-group-t">Amarelos por jogo · mandante × visitante</div>
+        <div class="rx-group-t">Amarelos por jogo · mandante × visitante · ${v.janela}</div>
         <div class="rx-row">
           <div class="rx-side"><span class="rx-val tnum">${nb(c)}</span><div class="rx-bar"><div class="rx-fill home" style="width:${c/max*100}%"></div></div></div>
           <div class="rx-label">🟨 amarelos</div>
@@ -3285,28 +3427,61 @@ function renderArbitro(){
       </div>`;
   }
 
+  // extrato jogo a jogo
+  const dataBR = ts => { const [y,m,d] = ts.split("-"); return `${d}/${m}/${y.slice(2)}`; };
+  const listaJogos = (jan === "base" ? (arb.ultimos || []).slice(0, 10) : v.jogos);
+  const extrato = listaJogos.length ? `
+    <div class="section-h" style="margin-top:24px"><span class="lbl">Jogo a jogo</span><span class="count tnum">${listaJogos.length} jogos</span></div>
+    <div class="jg-list">${listaJogos.map(g => `
+      <div class="jg-game" style="grid-template-columns:66px 1fr auto">
+        <span class="jg-date">${dataBR(g.ts)}</span>
+        <span class="jg-adv">${g.jogo}</span>
+        <span class="jg-vals"><b class="amber tnum">${g.am}</b> 🟨${g.vm ? ` · <b class="tnum" style="color:#E05A4E">${g.vm}</b> 🟥` : ""} · <b class="tnum">${g.faltas}</b> faltas</span>
+      </div>`).join("")}</div>` : "";
+
   el.innerHTML = `
     <button class="back" onclick="go('jogo', null, null, null, ${fi})"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg> ${fx.home} x ${fx.away}</button>
     <div class="phead">
       <div class="avatar" style="${avatarStyle(arb.nome.length*7)}; font-size:26px">👨‍⚖️</div>
       <div style="flex:1; min-width:200px">
         <h1>${arb.nome}</h1>
-        <div class="pmeta">Árbitro <span class="dot"></span> <span class="badge">${arb.jogos || "—"} jogos na base</span> <span class="badge">apita ${fx.home} x ${fx.away}</span></div>
+        <div class="pmeta">Árbitro <span class="dot"></span> <span class="badge">${v.janela}</span> <span class="badge">apita ${fx.home} x ${fx.away}</span></div>
       </div>
     </div>
-    <div class="tiles" style="margin-top:22px">
-      ${tile("🟨 Amarelos / jogo", nb(arb.amarelos), "hero-a")}
-      ${tile("Faltas / jogo", nb(arb.faltas), "hero-b")}
-      ${tile("🟥 Vermelhos / jogo", nb(arb.vermelhos))}
-      ${tile("Pênaltis / jogo", nb(arb.penaltis))}
+    ${filtros}
+    <div class="tiles" style="margin-top:16px">
+      ${tile("🟨 Amarelos / jogo", nb(v.amarelos), "hero-a")}
+      ${tile("Faltas / jogo", nb(v.faltas), "hero-b")}
+      ${tile("🟥 Vermelhos / jogo", nb(v.vermelhos))}
+      ${v.penaltis != null ? tile("Pênaltis / jogo", nb(v.penaltis)) : tile("Jogos na janela", v.n ?? "—")}
     </div>
     ${splitHTML}
+    <button class="h2h-cardbtn" onclick="abrirCardArbitro()" style="margin-top:16px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4M8 11l4 4 4-4M12 15V3"/></svg>
+      Gerar card
+    </button>
+    ${extrato}
     <div class="dna-panel">
-      ${arb.var != null ? `<div class="dna-row"><span class="k">Intervenções de VAR por jogo</span><span class="v flat tnum">${nb(arb.var)}</span></div>` : ""}
-      <div class="dna-row"><span class="k">Amostra: todas as temporadas disponíveis na base (todas as competições que ele apitou)</span><span class="v flat tnum">${arb.jogos || "—"} jogos</span></div>
+      ${v.varm != null ? `<div class="dna-row"><span class="k">Intervenções de VAR por jogo</span><span class="v flat tnum">${nb(v.varm)}</span></div>` : ""}
+      <div class="dna-row"><span class="k">Fonte: todas as competições apitadas por ele na base · janela ativa: ${v.janela}</span><span class="v flat tnum">⚖️</span></div>
     </div>
     ${sourceNoteQI()}
   `;
+}
+
+/* Card do árbitro (respeita a janela ativa) */
+function abrirCardArbitro(){
+  const fi = state.jogoAberto ?? 0;
+  const fx = FIXTURES[fi];
+  const arb = fx ? (SEM.arbitros || {})[String(fx.id)] : null;
+  if (!arb) return;
+  const v = arbView(arb);
+  state.card = { tipo: "arbitro", formato: "sticker", label: "arbitro",
+    nome: arb.nome, fx, contexto: `${v.janela} · apita ${fx.home} x ${fx.away}`,
+    amarelos: v.amarelos, faltas: v.faltas, vermelhos: v.vermelhos,
+    amarelosCasa: v.amarelosCasa, amarelosFora: v.amarelosFora,
+    jogos: (v.jogos || []).slice(0, 8) };
+  montarCardModal();
 }
 
 function renderJogo(){
@@ -3374,7 +3549,7 @@ function renderJogo(){
   // faixa do árbitro (quando já designado) — clicável → perfil completo
   const arb = (SEM.arbitros || {})[String(fx.id)];
   const numBR = v => v != null ? String(v).replace(".", ",") : null;
-  const arbBar = arb && arb.nome ? `<button class="arb-bar click" onclick="go('arbitro')">👨‍⚖️ Árbitro: <b>${arb.nome}</b>${arb.amarelos != null ? ` · 🟨 ${numBR(arb.amarelos)} amarelos/jogo` : ""}${arb.faltas != null ? ` · ${numBR(arb.faltas)} faltas/jogo` : ""}${arb.jogos ? ` <span>(${arb.jogos} jogos na base)</span>` : ""}<span class="arb-go">ver perfil ›</span></button>` : "";
+  const arbBar = arb && arb.nome ? `<button class="arb-bar click" onclick="state.arbJanela=10; go('arbitro')">👨‍⚖️ Árbitro: <b>${arb.nome}</b>${arb.amarelos != null ? ` · 🟨 ${numBR(arb.amarelos)} amarelos/jogo` : ""}${arb.faltas != null ? ` · ${numBR(arb.faltas)} faltas/jogo` : ""}${arb.jogos ? ` <span>(${arb.jogos} jogos na base)</span>` : ""}<span class="arb-go">ver perfil ›</span></button>` : "";
 
   const raioxBloco = `${tabsRow}${arbBar}${filtrosRow}<div class="rx-card" style="margin-top:14px">${teamsHead}${corpo}</div>`;
 

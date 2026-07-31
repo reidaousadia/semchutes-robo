@@ -377,6 +377,47 @@ for fx in semana:
     arbitros[str(fx["id"])] = ref_stats_cache[rid]
 print(f"árbitros designados: {len(arbitros)}", flush=True)
 
+# jogo a jogo dos árbitros (varredura 12 meses das 5 ligas, janelas de até 30 jogos,
+# com amarelos separados mandante/visitante — filtros do perfil no app)
+por_ref = {}
+fim_ref = hoje
+for _ in range(4):
+    ini_ref = fim_ref - timedelta(days=90)
+    pagina = 1
+    while True:
+        dd = sm(f"/fixtures/between/{ini_ref.isoformat()}/{fim_ref.isoformat()}", page=pagina, per_page=50,
+                filters=f"fixtureLeagues:{','.join(map(str, LIGAS_SM))}",
+                include="referees.referee;statistics;participants;state")
+        for fx2 in dd.get("data", []):
+            if (fx2.get("state") or {}).get("short_name") not in FINALIZADO: continue
+            ref2 = next(((r.get("referee") or {}) for r in fx2.get("referees", [])
+                         if r.get("type_id") == REF_PRINCIPAL), None)
+            if not ref2 or not ref2.get("id"): continue
+            casa_id = next((p["id"] for p in fx2.get("participants", [])
+                            if (p.get("meta") or {}).get("location") == "home"), None)
+            am = vm = fl = amC = amF = 0
+            for st in fx2.get("statistics", []):
+                t = st.get("type_id"); v = (st.get("data") or {}).get("value") or 0
+                if t == 84:
+                    am += v
+                    if st.get("participant_id") == casa_id: amC += v
+                    else: amF += v
+                elif t == 83: vm += v
+                elif t == 56: fl += v
+            nomes = sorted(fx2.get("participants", []), key=lambda p: (p.get("meta") or {}).get("location") != "home")
+            por_ref.setdefault(ref2["id"], []).append({
+                "ts": fx2["starting_at"][:10], "jogo": " x ".join(p["name"] for p in nomes),
+                "am": am, "amC": amC, "amF": amF, "vm": vm, "faltas": fl})
+        if not (dd.get("pagination") or {}).get("has_more"): break
+        pagina += 1
+    fim_ref = ini_ref - timedelta(days=1)
+for rid2 in por_ref:
+    por_ref[rid2] = sorted(por_ref[rid2], key=lambda x: x["ts"], reverse=True)[:30]
+for fid2, arb2 in arbitros.items():
+    lst = por_ref.get(arb2.get("id"))
+    if lst: arb2["ultimos"] = lst
+print(f"histórico de árbitros: {sum(1 for a in arbitros.values() if a.get('ultimos'))} com jogo a jogo", flush=True)
+
 # ---------------- 9. monta dados.js ----------------
 escudos = {}
 for fx in semana:
