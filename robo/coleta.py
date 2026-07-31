@@ -88,6 +88,16 @@ for f in fixtures_raw:
 print(f"{len(teams)} times", flush=True)
 
 # ---------------------------------------------------------------- 2. elencos (com id → foto por URL)
+# elenco ATUAL por time (mata transferidos, ex.: Rayan fora do Vasco):
+# estatística da temporada só entra se o jogador está no plantel de hoje.
+squad_ids, squad_nomes = {}, {}
+for tid in teams:
+    sq, _ = get("/players/squads", team=tid)
+    ids = {p["id"] for bloco in sq for p in (bloco.get("players") or [])}
+    nomes = {p["name"] for bloco in sq for p in (bloco.get("players") or [])}
+    squad_ids[tid], squad_nomes[tid] = ids, nomes
+    print(f"  plantel atual {teams[tid]}: {len(ids)}", flush=True)
+
 elencos, top_por_time, fotos = {}, {}, {}
 for tid, tname in teams.items():
     acum, page = {}, 1
@@ -114,8 +124,12 @@ for tid, tname in teams.items():
         if page >= (paging.get("total") or 1): break
         page += 1
     lista = []
+    atuais = squad_ids.get(tid) or set()
     for a in acum.values():
         if a["apps"] < 1 or a["mins"] < 30: continue
+        # transferido/fora do plantel atual: fora das listas do time
+        # (guarda: se o endpoint de plantel falhou/veio vazio, não filtra nada)
+        if atuais and a["id"] not in atuais: continue
         lista.append({"name": a["name"], "pos": a["pos"], "apps": a["apps"],
                       "media": round(a["shots"] / a["apps"], 2),
                       "mediaOn": round(a["on"] / a["apps"], 2),
@@ -310,6 +324,12 @@ for tid, lst in time_fixtures.items():
                 "fc": fl.get("committed") or 0, "fs": fl.get("drawn") or 0,
                 "am": cd.get("yellow") or 0, "vm": cd.get("red") or 0})
             fotos.setdefault(p["player"]["name"], f"/media/football/players/{p['player']['id']}.png")
+    # tira transferidos das listas do time (só se o plantel atual veio e o corte é plausível)
+    nomes_atuais = squad_nomes.get(tid) or set()
+    if nomes_atuais:
+        filtrado = {n: j for n, j in equipe.items() if n in nomes_atuais}
+        if len(filtrado) >= len(equipe) * 0.5:  # trava: corte >50% = anomalia de dados, não filtra
+            equipe = filtrado
     jog_hist[str(tid)] = equipe
 print("jogHist ok", flush=True)
 
