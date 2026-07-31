@@ -1,0 +1,22 @@
+name: atualiza-site
+on:
+  schedule:
+    - cron: '0 9 * * *'   # 09:00 UTC = 06:00 Brasília
+  workflow_dispatch: {}
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Coleta completa
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+        run: python3 robo/coleta.py
+      - name: Publica no Netlify
+        env:
+          NETLIFY_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
+        run: python3 robo/deploy.py
