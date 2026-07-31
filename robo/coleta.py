@@ -314,7 +314,26 @@ for tid, lst in time_fixtures.items():
 print("jogHist ok", flush=True)
 
 # ---------------------------------------------------------------- 8. escalação do último jogo por time
-escalacoes = {"ultimas": {}, "confirmadas": {}}
+MOTIVO_PT = {"Suspended": "suspenso", "Yellow Cards": "suspenso (amarelos)", "Red Card": "suspenso (vermelho)",
+             "Injury": "lesão", "Muscle Injury": "lesão muscular", "Knee Injury": "lesão no joelho",
+             "Ankle Injury": "lesão no tornozelo", "Thigh Injury": "lesão na coxa", "Knock": "pancada",
+             "Illness": "doença", "Inactive": "inativo", "Lacking Match Fitness": "sem ritmo de jogo",
+             "National selection": "seleção nacional"}
+escalacoes = {"ultimas": {}, "confirmadas": {}, "desfalques": {}}
+# desfalques (lesões/suspensões) por jogo da semana — cobertura varia por liga
+for fx in fixtures:
+    resp, _ = get("/injuries", fixture=fx["id"])
+    if not resp: continue
+    vistos_d = set()
+    lst = []
+    for x in resp:
+        chave = (x["team"]["id"], x["player"]["name"])
+        if chave in vistos_d: continue
+        vistos_d.add(chave)
+        lst.append({"tid": x["team"]["id"], "nome": x["player"]["name"],
+                    "motivo": MOTIVO_PT.get(x["player"]["reason"], (x["player"]["reason"] or "").lower() or "desfalque")})
+    if lst: escalacoes["desfalques"][str(fx["id"])] = lst
+print(f"desfalques: {len(escalacoes['desfalques'])} jogos com dados", flush=True)
 for tid, info in ultima_fixture.items():
     resp, _ = get("/fixtures/lineups", fixture=info["fid"])
     bloco = next((b for b in resp if b["team"]["id"] == tid), None)

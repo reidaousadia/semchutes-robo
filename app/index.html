@@ -688,24 +688,48 @@
   .jg-vals b { font-weight: 800; }
   .jg-vals .amber { color: var(--amber); } .jg-vals .acc { color: var(--acc); }
 
-  /* ---------- escalações (campinho) ---------- */
+  /* ---------- escalações (campinho estilo broadcast) ---------- */
   .esc-pitch {
-    margin-top: 12px; min-height: 360px;
-    display: flex; flex-direction: column; justify-content: space-between; gap: 10px;
+    position: relative; margin-top: 12px; min-height: 430px;
+    display: flex; flex-direction: column; justify-content: space-between; gap: 8px;
     background:
-      repeating-linear-gradient(180deg, rgba(47,208,138,0.07) 0 56px, rgba(47,208,138,0.035) 56px 112px);
-    border: 1px solid color-mix(in srgb, var(--acc) 28%, var(--border-soft));
-    border-radius: 12px; padding: 16px 4px;
+      radial-gradient(circle at 50% 118%, rgba(255,255,255,0.05) 0 11%, transparent 11.5%),
+      repeating-linear-gradient(180deg, rgba(47,208,138,0.10) 0 54px, rgba(47,208,138,0.05) 54px 108px),
+      linear-gradient(180deg, #0D1A12, #0B1710);
+    border: 1px solid color-mix(in srgb, var(--acc) 30%, var(--border-soft));
+    border-radius: 12px; padding: 22px 4px 16px;
+    overflow: hidden;
   }
-  .esc-row { display: flex; justify-content: space-evenly; }
-  .esc-p { width: 62px; min-width: 0; text-align: center; }
-  .esc-dot { width: 38px; height: 38px; border-radius: 50%; margin: 0 auto; overflow: hidden;
-    background: var(--surface); border: 2px solid var(--acc);
-    display: grid; place-items: center; font-family: var(--f-mono); font-weight: 800; font-size: 13px; color: var(--acc); }
+  /* linhas do campo: contorno + meia-lua superior + grande área embaixo */
+  .esc-marks, .esc-marks::before, .esc-marks::after { position: absolute; pointer-events: none; border: 1.5px solid rgba(255,255,255,0.10); }
+  .esc-marks { inset: 9px; border-radius: 8px; }
+  .esc-marks::before { content: ""; left: 50%; top: -1.5px; transform: translateX(-50%);
+    width: 34%; height: 13%; border-top: 0; border-radius: 0 0 999px 999px; }
+  .esc-marks::after { content: ""; left: 50%; bottom: -1.5px; transform: translateX(-50%);
+    width: 52%; height: 15%; border-bottom: 0; border-radius: 6px 6px 0 0; }
+  .esc-row { display: flex; justify-content: space-evenly; position: relative; z-index: 1; }
+  .esc-p { appearance: none; border: 0; background: transparent; padding: 0; font: inherit;
+    width: 68px; min-width: 0; text-align: center; position: relative; }
+  .esc-p.click { cursor: pointer; }
+  .esc-p.click:hover .esc-dot { transform: scale(1.12); box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+  .esc-dot { width: 46px; height: 46px; border-radius: 50%; margin: 0 auto; overflow: hidden; position: relative;
+    background: var(--surface); border: 2px solid var(--acc); transition: transform .12s ease;
+    display: grid; place-items: center; font-family: var(--f-mono); font-weight: 800; font-size: 14px; color: var(--acc); }
   .esc-dot img { width: 100%; height: 100%; object-fit: cover; }
-  .esc-nm { font-size: 9.5px; line-height: 1.2; margin-top: 4px; color: var(--text-dim);
+  .esc-nm { font-family: var(--f-ui); font-size: 10px; font-weight: 600; line-height: 1.25; margin: 5px auto 0;
+    max-width: 66px; padding: 2px 6px; border-radius: 5px;
+    background: rgba(5,10,7,0.62); color: var(--text);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .esc-nm b { font-family: var(--f-mono); font-size: 9.5px; color: var(--muted); font-weight: 800; }
   .esc-pitch.away .esc-dot { border-color: var(--amber); color: var(--amber); }
+  /* desfalque confirmado */
+  .esc-p.out .esc-dot { border-color: #E05A4E; filter: grayscale(.85); opacity: .8; }
+  .esc-p.out .esc-nm { text-decoration: line-through; color: var(--muted); }
+  .esc-x { position: absolute; inset: 0; display: grid; place-items: center;
+    background: rgba(224,90,78,0.30); color: #FF8A7E; font-weight: 800; font-size: 18px; }
+  .esc-desf { margin-top: 10px; font-size: 12.5px; color: var(--text-dim); background: color-mix(in srgb, #E05A4E 10%, transparent);
+    border: 1px solid color-mix(in srgb, #E05A4E 30%, var(--border-soft)); border-radius: 8px; padding: 9px 12px; }
+  .esc-desf span { color: var(--muted); }
 
   /* ---------- abas da tela do jogo (Números / Confronto / Quentes) ---------- */
   .jogo-tabs { display: flex; margin: 18px 0 4px; border-bottom: 1px solid var(--border-soft); }
@@ -3139,19 +3163,44 @@ function quentesCorpo(fx, escopo, fi){
     </div>`;
 }
 
-/* ---------- ESCALAÇÕES: campinho com o XI do último jogo de cada time ---------- */
-function escalacoesCorpo(fx){
+/* ---------- ESCALAÇÕES: campinho (provável = último XI + desfalques oficiais) ---------- */
+function normNome(s){ return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim(); }
+function escalacoesCorpo(fx, fi){
   const dataBR = ts => { const [y,m,d] = (ts||"").split("-"); return d ? `${d}/${m}/${y.slice(2)}` : ""; };
+  const desfalques = (SEM.escalacoes?.desfalques || {})[String(fx.id)] || [];
+
   const painel = (tid, nome, side) => {
     const e = (SEM.escalacoes?.ultimas || {})[String(tid)];
+    const desfTime = desfalques.filter(x => x.tid === tid);
+    const desfNorm = desfTime.map(x => normNome(x.nome));
     if (!e || !e.xi?.length) return `<div class="qt-panel ${side}">
       <div class="qt-head">${teamCrest(nome)}<span class="nm">${nome}</span></div>
       <div class="empty-box" style="margin-top:10px">Sem escalação registrada do último jogo deste time.</div></div>`;
-    // agrupa o XI pelas linhas do campo (grid "linha:coluna"; linha 1 = goleiro)
+
+    // liga o nome da escalação ao elenco (pra abrir o perfil ao clicar)
+    const elenco = ELENCOS[String(tid)] || [];
+    const achaIdx = nomeEsc => {
+      const n = normNome(nomeEsc);
+      let i = elenco.findIndex(j => normNome(j.name) === n);
+      if (i >= 0) return i;
+      // "M. Cassierra" → inicial + sobrenome
+      const m = n.match(/^(\w)\.\s*(.+)$/);
+      if (m){
+        const cands = elenco.map((j, k) => [j, k]).filter(([j]) => {
+          const nj = normNome(j.name);
+          return nj.endsWith(m[2]) && nj.startsWith(m[1]);
+        });
+        if (cands.length === 1) return cands[0][1];
+      }
+      // sobrenome único
+      const sobren = n.split(" ").pop();
+      const c2 = elenco.map((j, k) => [j, k]).filter(([j]) => normNome(j.name).split(" ").includes(sobren));
+      return c2.length === 1 ? c2[0][1] : -1;
+    };
+
     const temGrid = e.xi.some(p => p.grid);
     const linhas = {};
     e.xi.forEach(p => {
-      // sem grid na API: monta as linhas pela posição (G/D/M/A)
       const r = temGrid
         ? (parseInt((p.grid || "0:0").split(":")[0]) || 0)
         : ({ G: 1, D: 2, M: 3, F: 4 }[p.pos] ?? 3);
@@ -3162,19 +3211,30 @@ function escalacoesCorpo(fx){
       .sort((a, b) => (parseInt((a.grid||"0:0").split(":")[1])||0) - (parseInt((b.grid||"0:0").split(":")[1])||0))
       .map(p => {
         const foto = window.SC_ASSETS?.fotos?.[p.nome];
-        return `<div class="esc-p" title="${p.nome}${p.num!=null?" · nº "+p.num:""}">
-          <div class="esc-dot">${foto ? `<img src="${foto}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${p.num ?? ""}'}))">` : `<span>${p.num ?? ""}</span>`}</div>
-          <div class="esc-nm">${p.nome}</div>
-        </div>`;
+        const idx = achaIdx(p.nome);
+        const fora = desfNorm.some(dn => dn === normNome(p.nome) || (normNome(p.nome).match(/^\w\./) && dn.endsWith(normNome(p.nome).split(" ").pop())));
+        const clique = idx >= 0 ? `onclick="abrirJogador(${fi}, '${side}', ${idx})"` : "";
+        const sobrenome = p.nome.split(" ").length > 1 && p.nome.length > 13 ? p.nome.split(" ").slice(-1)[0] : p.nome;
+        return `<button class="esc-p ${idx>=0?"click":""} ${fora?"out":""}" ${clique} title="${p.nome}${fora?" · FORA":""}">
+          <div class="esc-dot">${foto ? `<img src="${foto}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${p.num ?? ""}'}))">` : `<span>${p.num ?? ""}</span>`}${fora?'<span class="esc-x">✕</span>':""}</div>
+          <div class="esc-nm"><b>${p.num ?? ""}</b> ${sobrenome}</div>
+        </button>`;
       }).join("")}</div>`).join("");
+
+    const desfHTML = desfTime.length ? `<div class="esc-desf">🚫 <b>Fora:</b> ${desfTime.map(x => `${x.nome} <span>(${x.motivo})</span>`).join(" · ")}</div>` : "";
     return `<div class="qt-panel ${side}">
       <div class="qt-head">${teamCrest(nome)}<span class="nm">${nome}</span></div>
-      <div class="qt-sub">${e.formacao || "formação —"}${e.tecnico ? ` · téc. ${e.tecnico}` : ""} · último jogo: × ${e.adv} (${dataBR(e.ts)})</div>
-      <div class="esc-pitch ${side}">${rowsHTML}</div>
+      <div class="qt-sub">${e.formacao || "formação —"}${e.tecnico ? ` · téc. ${e.tecnico}` : ""} · base: × ${e.adv} (${dataBR(e.ts)})</div>
+      <div class="esc-pitch ${side}"><div class="esc-marks"></div>${rowsHTML}</div>
+      ${desfHTML}
     </div>`;
   };
+
+  const notaDesf = desfalques.length
+    ? `desfalques oficiais marcados com ✕`
+    : `sem dados de desfalque pra este jogo (a fonte não cobre todas as competições)`;
   return `
-    <div class="rx-sample" style="margin:2px 0 12px">escalação do <b>último jogo</b> de cada time — a confirmada sai ~1h antes do apito · receba na hora no <a href="https://t.me/apitoualertas" target="_blank" rel="noopener" style="color:var(--acc); font-weight:700">t.me/apitoualertas</a> 🔔</div>
+    <div class="rx-sample" style="margin:2px 0 12px">escalação <b>provável</b> — base: último jogo · ${notaDesf} · confirmada sai ~1h antes no <a href="https://t.me/apitoualertas" target="_blank" rel="noopener" style="color:var(--acc); font-weight:700">t.me/apitoualertas</a> 🔔</div>
     <div class="qt-grid">
       ${painel(fx.homeId, fx.home, "home")}
       ${painel(fx.awayId, fx.away, "away")}
@@ -3217,7 +3277,7 @@ function renderJogo(){
   } else if (tab === "quentes"){
     corpo = quentesCorpo(fx, state.rxEscopo, fi);
   } else if (tab === "esc"){
-    corpo = escalacoesCorpo(fx);
+    corpo = escalacoesCorpo(fx, fi);
   } else {
     const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo);
     const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo);
