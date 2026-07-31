@@ -3375,95 +3375,109 @@ function escalacoesCorpo(fx, fi){
 
 /* ---------- PERFIL DO ÁRBITRO (mercado de cartões) ---------- */
 function setArbJanela(n){ state.arbJanela = n; render(); }
-/* métricas do árbitro sob a janela ativa (5/10/15/30 jogos ou base completa) */
-function arbView(arb){
+function setArbEscopo(e){ state.arbEscopo = e; render(); }
+/* métricas do árbitro sob ESCOPO (geral/casa/fora/confronto) + JANELA (5/10/15/30/base) */
+function arbView(arb, fx){
   const jan = state.arbJanela ?? 10;
-  const ult = arb.ultimos || [];
-  if (jan !== "base" && ult.length >= 3){
-    const jogos = ult.slice(0, jan);
-    const n = jogos.length;
-    const med = sel => Math.round(jogos.reduce((a, g) => a + sel(g), 0) / n * 100) / 100;
-    return { janela: `últimos ${n} jogos`, n, jogos,
-             amarelos: med(g => g.am), faltas: med(g => g.faltas), vermelhos: med(g => g.vm),
-             amarelosCasa: med(g => g.amC), amarelosFora: med(g => g.amF),
-             penaltis: null, varm: null };
+  const esc = state.arbEscopo || "geral";
+  const todos = arb.ultimos || [];
+  const filtro = esc === "casa" ? (g => g.jogo.includes(fx.home))
+               : esc === "fora" ? (g => g.jogo.includes(fx.away))
+               : esc === "confronto" ? (g => g.jogo.includes(fx.home) && g.jogo.includes(fx.away))
+               : (() => true);
+  const escLabel = esc === "casa" ? `com o ${fx.home}` : esc === "fora" ? `com o ${fx.away}`
+                 : esc === "confronto" ? `no confronto ${fx.home} x ${fx.away}` : "geral";
+  const subset = todos.filter(filtro);
+
+  // GERAL + base completa = agregado de carreira (tem pênaltis/VAR)
+  if (esc === "geral" && jan === "base"){
+    return { esc, escLabel, janela: `base completa (${arb.jogos || "?"} jogos)`, n: arb.jogos,
+             jogos: todos.slice(0, 10), vazio: false,
+             amarelos: arb.amarelos, faltas: arb.faltas, vermelhos: arb.vermelhos,
+             amarelosCasa: arb.amarelosCasa, amarelosFora: arb.amarelosFora,
+             penaltis: arb.penaltis, varm: arb.var };
   }
-  return { janela: `base completa (${arb.jogos || "?"} jogos)`, n: arb.jogos, jogos: ult,
-           amarelos: arb.amarelos, faltas: arb.faltas, vermelhos: arb.vermelhos,
-           amarelosCasa: arb.amarelosCasa, amarelosFora: arb.amarelosFora,
-           penaltis: arb.penaltis, varm: arb.var };
+  const jogos = jan === "base" ? subset : subset.slice(0, jan);
+  if (!jogos.length){
+    return { esc, escLabel, janela: "sem jogos", n: 0, jogos: [], vazio: true };
+  }
+  const med = sel => Math.round(jogos.reduce((a, g) => a + sel(g), 0) / jogos.length * 100) / 100;
+  const janLabel = jan === "base" ? `todos os ${jogos.length} da base recente` : `últimos ${jogos.length}`;
+  return { esc, escLabel, janela: `${janLabel} · ${escLabel}`, n: jogos.length, jogos, vazio: false,
+           amarelos: med(g => g.am), faltas: med(g => g.faltas), vermelhos: med(g => g.vm),
+           amarelosCasa: med(g => g.amC), amarelosFora: med(g => g.amF),
+           penaltis: null, varm: null };
 }
 function renderArbitro(){
   const fi = state.jogoAberto ?? 0;
   const fx = FIXTURES[fi];
   const arb = fx ? (SEM.arbitros || {})[String(fx.id)] : null;
   if (!arb){ go('jogo', null, null, null, fi); return; }
-  const v = arbView(arb);
+  const v = arbView(arb, fx);
   const nb = x => x != null ? String(x).replace(".", ",") : "—";
   const tile = (k, val, cls="") => `<div class="tile ${cls}"><div class="k">${k}</div><div class="big tnum" style="font-size:34px">${val}</div></div>`;
   const jan = state.arbJanela ?? 10;
+  const esc = state.arbEscopo || "geral";
   const temUlt = (arb.ultimos || []).length >= 3;
-  const chip = (n, txt) => `<button class="chip ${jan===n?'on':''}" onclick="setArbJanela(${typeof n==='string'?`'${n}'`:n})">${txt}</button>`;
+
+  // ----- FILTRO 1: escopo (Geral · mandante · visitante · Confronto) -----
+  const chipE = (e, txt) => `<button class="chip ${esc===e?'on':''}" onclick="setArbEscopo('${e}')">${txt}</button>`;
+  const chipJ = (n, txt) => `<button class="chip ${jan===n?'on':''}" onclick="setArbJanela(${typeof n==='string'?`'${n}'`:n})">${txt}</button>`;
   const filtros = temUlt ? `
     <div class="jogo-filtros" style="margin-top:16px">
+      <div class="qlabel">Quais jogos do árbitro?</div>
+      <div class="filters">${chipE("geral","Geral")}${chipE("casa", fx.home)}${chipE("fora", fx.away)}${chipE("confronto","⚔️ Confronto")}</div>
       <div class="qlabel">Quantos jogos contar?</div>
-      <div class="filters">${chip(5,"Últimos 5")}${chip(10,"Últimos 10")}${chip(15,"Últimos 15")}${chip(30,"Últimos 30")}${chip("base","Base completa")}</div>
+      <div class="filters">${chipJ(5,"Últimos 5")}${chipJ(10,"Últimos 10")}${chipJ(15,"Últimos 15")}${chipJ(30,"Últimos 30")}${chipJ("base","Base completa")}</div>
     </div>` : "";
 
-  // split casa × fora (reage à janela)
-  let splitHTML = "";
-  if (v.amarelosCasa != null && v.amarelosFora != null){
-    const c = v.amarelosCasa, f = v.amarelosFora, max = Math.max(c, f, 0.001);
-    const vies = f > c * 1.15 ? "tende a dar MAIS cartão pro visitante" : c > f * 1.15 ? "tende a dar MAIS cartão pro mandante" : "equilibrado entre mandante e visitante";
-    splitHTML = `
-      <div class="rx-card" style="margin-top:18px">
-        <div class="rx-group-t">Amarelos por jogo · mandante × visitante · ${v.janela}</div>
-        <div class="rx-row">
-          <div class="rx-side"><span class="rx-val tnum">${nb(c)}</span><div class="rx-bar"><div class="rx-fill home" style="width:${c/max*100}%"></div></div></div>
-          <div class="rx-label">🟨 amarelos</div>
-          <div class="rx-side away"><div class="rx-bar"><div class="rx-fill away" style="width:${f/max*100}%"></div></div><span class="rx-val tnum">${nb(f)}</span></div>
-        </div>
-        <div class="rx-sample" style="margin-top:8px">esquerda = pro time da CASA · direita = pro VISITANTE · leitura: ${vies}</div>
+  // ----- corpo (tudo reage a escopo + janela) -----
+  let corpo;
+  if (v.vazio){
+    corpo = `<div class="empty-box" style="margin-top:16px">Sem jogos do ${arb.nome.split(" ")[0]} ${v.escLabel} nos últimos 12 meses da base — troque o filtro acima (ex.: "Geral").</div>`;
+  } else {
+    let splitHTML = "";
+    if (v.amarelosCasa != null && v.amarelosFora != null){
+      const c = v.amarelosCasa, f = v.amarelosFora, max = Math.max(c, f, 0.001);
+      const vies = f > c * 1.15 ? "tende a dar MAIS cartão pro visitante" : c > f * 1.15 ? "tende a dar MAIS cartão pro mandante" : "equilibrado entre mandante e visitante";
+      splitHTML = `
+        <div class="rx-card" style="margin-top:18px">
+          <div class="rx-group-t">Amarelos por jogo · mandante × visitante</div>
+          <div class="rx-row">
+            <div class="rx-side"><span class="rx-val tnum">${nb(c)}</span><div class="rx-bar"><div class="rx-fill home" style="width:${c/max*100}%"></div></div></div>
+            <div class="rx-label">🟨 amarelos</div>
+            <div class="rx-side away"><div class="rx-bar"><div class="rx-fill away" style="width:${f/max*100}%"></div></div><span class="rx-val tnum">${nb(f)}</span></div>
+          </div>
+          <div class="rx-sample" style="margin-top:8px">esquerda = pro time da CASA · direita = pro VISITANTE · leitura: ${vies}</div>
+        </div>`;
+    }
+    const dataBR = ts => { const [y,m,d] = ts.split("-"); return `${d}/${m}/${y.slice(2)}`; };
+    const extrato = v.jogos.length ? `
+      <div class="section-h" style="margin-top:24px"><span class="lbl">Jogo a jogo · ${v.escLabel}</span><span class="count tnum">${v.jogos.length} jogos</span></div>
+      <div class="jg-list">${v.jogos.map(g => `
+        <div class="jg-game" style="grid-template-columns:66px 1fr auto">
+          <span class="jg-date">${dataBR(g.ts)}</span>
+          <span class="jg-adv">${g.jogo}</span>
+          <span class="jg-vals"><b class="amber tnum">${g.am}</b> 🟨${g.vm ? ` · <b class="tnum" style="color:#E05A4E">${g.vm}</b> 🟥` : ""} · <b class="tnum">${g.faltas}</b> faltas</span>
+        </div>`).join("")}</div>` : "";
+    corpo = `
+      <div class="tiles" style="margin-top:16px">
+        ${tile("🟨 Amarelos / jogo", nb(v.amarelos), "hero-a")}
+        ${tile("Faltas / jogo", nb(v.faltas), "hero-b")}
+        ${tile("🟥 Vermelhos / jogo", nb(v.vermelhos))}
+        ${v.penaltis != null ? tile("Pênaltis / jogo", nb(v.penaltis)) : tile("Jogos na amostra", v.n ?? "—")}
+      </div>
+      ${splitHTML}
+      <button class="h2h-cardbtn" onclick="abrirCardArbitro()" style="margin-top:16px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4M8 11l4 4 4-4M12 15V3"/></svg>
+        Gerar card
+      </button>
+      ${extrato}
+      <div class="dna-panel">
+        ${v.varm != null ? `<div class="dna-row"><span class="k">Intervenções de VAR por jogo</span><span class="v flat tnum">${nb(v.varm)}</span></div>` : ""}
+        <div class="dna-row"><span class="k">Amostra ativa: ${v.janela}</span><span class="v flat tnum">⚖️</span></div>
       </div>`;
   }
-
-  // ----- o árbitro COM ESTES TIMES (filtra o histórico pelos nomes) -----
-  const dataBR = ts => { const [y,m,d] = ts.split("-"); return `${d}/${m}/${y.slice(2)}`; };
-  const todos = arb.ultimos || [];
-  const linhaJogo = g => `
-      <div class="jg-game" style="grid-template-columns:66px 1fr auto">
-        <span class="jg-date">${dataBR(g.ts)}</span>
-        <span class="jg-adv">${g.jogo}</span>
-        <span class="jg-vals"><b class="amber tnum">${g.am}</b> 🟨${g.vm ? ` · <b class="tnum" style="color:#E05A4E">${g.vm}</b> 🟥` : ""} · <b class="tnum">${g.faltas}</b> faltas</span>
-      </div>`;
-  const grupoTime = (titulo, jogos) => {
-    if (!jogos.length) return "";
-    const med = sel => (jogos.reduce((a, g) => a + sel(g), 0) / jogos.length).toFixed(1).replace(".", ",");
-    return `
-      <div class="section-h" style="margin-top:20px"><span class="lbl">${titulo}</span><span class="count tnum">${jogos.length} jogo${jogos.length===1?"":"s"} · ${med(g=>g.am)} 🟨/jogo · ${med(g=>g.faltas)} faltas/jogo</span></div>
-      <div class="jg-list">${jogos.map(linhaJogo).join("")}</div>`;
-  };
-  const comAmbos = todos.filter(g => g.jogo.includes(fx.home) && g.jogo.includes(fx.away));
-  const comCasa = todos.filter(g => g.jogo.includes(fx.home) && !g.jogo.includes(fx.away));
-  const comFora = todos.filter(g => g.jogo.includes(fx.away) && !g.jogo.includes(fx.home));
-  const comTimes = (comAmbos.length || comCasa.length || comFora.length) ? `
-    <div class="rx-card" style="margin-top:18px">
-      <div class="rx-group-t">👨‍⚖️ ${arb.nome.split(" ")[0]} com estes times (últimos 12 meses)</div>
-      ${grupoTime(`⚔️ Apitou ${fx.home} x ${fx.away}`, comAmbos)}
-      ${grupoTime(`Com o ${fx.home}`, comCasa)}
-      ${grupoTime(`Com o ${fx.away}`, comFora)}
-    </div>` : "";
-
-  // extrato jogo a jogo (geral)
-  const listaJogos = (jan === "base" ? (arb.ultimos || []).slice(0, 10) : v.jogos);
-  const extrato = listaJogos.length ? `
-    <div class="section-h" style="margin-top:24px"><span class="lbl">Jogo a jogo</span><span class="count tnum">${listaJogos.length} jogos</span></div>
-    <div class="jg-list">${listaJogos.map(g => `
-      <div class="jg-game" style="grid-template-columns:66px 1fr auto">
-        <span class="jg-date">${dataBR(g.ts)}</span>
-        <span class="jg-adv">${g.jogo}</span>
-        <span class="jg-vals"><b class="amber tnum">${g.am}</b> 🟨${g.vm ? ` · <b class="tnum" style="color:#E05A4E">${g.vm}</b> 🟥` : ""} · <b class="tnum">${g.faltas}</b> faltas</span>
-      </div>`).join("")}</div>` : "";
 
   el.innerHTML = `
     <button class="back" onclick="go('jogo', null, null, null, ${fi})"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg> ${fx.home} x ${fx.away}</button>
@@ -3471,38 +3485,23 @@ function renderArbitro(){
       <div class="avatar" style="${avatarStyle(arb.nome.length*7)}; font-size:26px">👨‍⚖️</div>
       <div style="flex:1; min-width:200px">
         <h1>${arb.nome}</h1>
-        <div class="pmeta">Árbitro <span class="dot"></span> <span class="badge">${v.janela}</span> <span class="badge">apita ${fx.home} x ${fx.away}</span></div>
+        <div class="pmeta">Árbitro <span class="dot"></span> <span class="badge">apita ${fx.home} x ${fx.away}</span></div>
       </div>
     </div>
     ${filtros}
-    <div class="tiles" style="margin-top:16px">
-      ${tile("🟨 Amarelos / jogo", nb(v.amarelos), "hero-a")}
-      ${tile("Faltas / jogo", nb(v.faltas), "hero-b")}
-      ${tile("🟥 Vermelhos / jogo", nb(v.vermelhos))}
-      ${v.penaltis != null ? tile("Pênaltis / jogo", nb(v.penaltis)) : tile("Jogos na janela", v.n ?? "—")}
-    </div>
-    ${splitHTML}
-    ${comTimes}
-    <button class="h2h-cardbtn" onclick="abrirCardArbitro()" style="margin-top:16px">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4M8 11l4 4 4-4M12 15V3"/></svg>
-      Gerar card
-    </button>
-    ${extrato}
-    <div class="dna-panel">
-      ${v.varm != null ? `<div class="dna-row"><span class="k">Intervenções de VAR por jogo</span><span class="v flat tnum">${nb(v.varm)}</span></div>` : ""}
-      <div class="dna-row"><span class="k">Fonte: todas as competições apitadas por ele na base · janela ativa: ${v.janela}</span><span class="v flat tnum">⚖️</span></div>
-    </div>
+    ${corpo}
     ${sourceNoteQI()}
   `;
 }
 
-/* Card do árbitro (respeita a janela ativa) */
+/* Card do árbitro (respeita escopo + janela ativos) */
 function abrirCardArbitro(){
   const fi = state.jogoAberto ?? 0;
   const fx = FIXTURES[fi];
   const arb = fx ? (SEM.arbitros || {})[String(fx.id)] : null;
   if (!arb) return;
-  const v = arbView(arb);
+  const v = arbView(arb, fx);
+  if (v.vazio) return;
   state.card = { tipo: "arbitro", formato: "sticker", label: "arbitro",
     nome: arb.nome, fx, contexto: `${v.janela} · apita ${fx.home} x ${fx.away}`,
     amarelos: v.amarelos, faltas: v.faltas, vermelhos: v.vermelhos,
@@ -3576,7 +3575,7 @@ function renderJogo(){
   // faixa do árbitro (quando já designado) — clicável → perfil completo
   const arb = (SEM.arbitros || {})[String(fx.id)];
   const numBR = v => v != null ? String(v).replace(".", ",") : null;
-  const arbBar = arb && arb.nome ? `<button class="arb-bar click" onclick="state.arbJanela=10; go('arbitro')">👨‍⚖️ Árbitro: <b>${arb.nome}</b>${arb.amarelos != null ? ` · 🟨 ${numBR(arb.amarelos)} amarelos/jogo` : ""}${arb.faltas != null ? ` · ${numBR(arb.faltas)} faltas/jogo` : ""}${arb.jogos ? ` <span>(${arb.jogos} jogos na base)</span>` : ""}<span class="arb-go">ver perfil ›</span></button>` : "";
+  const arbBar = arb && arb.nome ? `<button class="arb-bar click" onclick="state.arbJanela=10; state.arbEscopo='geral'; go('arbitro')">👨‍⚖️ Árbitro: <b>${arb.nome}</b>${arb.amarelos != null ? ` · 🟨 ${numBR(arb.amarelos)} amarelos/jogo` : ""}${arb.faltas != null ? ` · ${numBR(arb.faltas)} faltas/jogo` : ""}${arb.jogos ? ` <span>(${arb.jogos} jogos na base)</span>` : ""}<span class="arb-go">ver perfil ›</span></button>` : "";
 
   const raioxBloco = `${tabsRow}${arbBar}${filtrosRow}<div class="rx-card" style="margin-top:14px">${teamsHead}${corpo}</div>`;
 
