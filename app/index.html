@@ -688,6 +688,25 @@
   .jg-vals b { font-weight: 800; }
   .jg-vals .amber { color: var(--amber); } .jg-vals .acc { color: var(--acc); }
 
+  /* ---------- escalações (campinho) ---------- */
+  .esc-pitch {
+    margin-top: 12px; min-height: 360px;
+    display: flex; flex-direction: column; justify-content: space-between; gap: 10px;
+    background:
+      repeating-linear-gradient(180deg, rgba(47,208,138,0.07) 0 56px, rgba(47,208,138,0.035) 56px 112px);
+    border: 1px solid color-mix(in srgb, var(--acc) 28%, var(--border-soft));
+    border-radius: 12px; padding: 16px 4px;
+  }
+  .esc-row { display: flex; justify-content: space-evenly; }
+  .esc-p { width: 62px; min-width: 0; text-align: center; }
+  .esc-dot { width: 38px; height: 38px; border-radius: 50%; margin: 0 auto; overflow: hidden;
+    background: var(--surface); border: 2px solid var(--acc);
+    display: grid; place-items: center; font-family: var(--f-mono); font-weight: 800; font-size: 13px; color: var(--acc); }
+  .esc-dot img { width: 100%; height: 100%; object-fit: cover; }
+  .esc-nm { font-size: 9.5px; line-height: 1.2; margin-top: 4px; color: var(--text-dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .esc-pitch.away .esc-dot { border-color: var(--amber); color: var(--amber); }
+
   /* ---------- abas da tela do jogo (Números / Confronto / Quentes) ---------- */
   .jogo-tabs { display: flex; margin: 18px 0 4px; border-bottom: 1px solid var(--border-soft); }
   .jogo-tab {
@@ -2663,7 +2682,8 @@ function renderJogadorSimples(){
     const tendencias =
       ladder(g => g.f, [1, 2, 3], { icon: "🎯", txt: "finalizações" }) +
       ladder(g => g.o, [1, 2], { icon: "⚽", txt: "chutes a gol" }) +
-      ladder(g => g.fs, [2], { icon: "🤕", txt: "faltas sofridas" });
+      ladder(g => g.fs, [2], { icon: "🤕", txt: "faltas sofridas" }) +
+      ladder(g => g.m, [60], { icon: "⏱️", txt: "minutos em campo" });
 
     const extrato = hist.map(g => `
       <div class="jg-game">
@@ -3119,6 +3139,48 @@ function quentesCorpo(fx, escopo, fi){
     </div>`;
 }
 
+/* ---------- ESCALAÇÕES: campinho com o XI do último jogo de cada time ---------- */
+function escalacoesCorpo(fx){
+  const dataBR = ts => { const [y,m,d] = (ts||"").split("-"); return d ? `${d}/${m}/${y.slice(2)}` : ""; };
+  const painel = (tid, nome, side) => {
+    const e = (SEM.escalacoes?.ultimas || {})[String(tid)];
+    if (!e || !e.xi?.length) return `<div class="qt-panel ${side}">
+      <div class="qt-head">${teamCrest(nome)}<span class="nm">${nome}</span></div>
+      <div class="empty-box" style="margin-top:10px">Sem escalação registrada do último jogo deste time.</div></div>`;
+    // agrupa o XI pelas linhas do campo (grid "linha:coluna"; linha 1 = goleiro)
+    const temGrid = e.xi.some(p => p.grid);
+    const linhas = {};
+    e.xi.forEach(p => {
+      // sem grid na API: monta as linhas pela posição (G/D/M/A)
+      const r = temGrid
+        ? (parseInt((p.grid || "0:0").split(":")[0]) || 0)
+        : ({ G: 1, D: 2, M: 3, F: 4 }[p.pos] ?? 3);
+      (linhas[r] = linhas[r] || []).push(p);
+    });
+    const ordens = Object.keys(linhas).map(Number).sort((a, b) => b - a); // ataque no topo, goleiro embaixo
+    const rowsHTML = ordens.map(r => `<div class="esc-row">${linhas[r]
+      .sort((a, b) => (parseInt((a.grid||"0:0").split(":")[1])||0) - (parseInt((b.grid||"0:0").split(":")[1])||0))
+      .map(p => {
+        const foto = window.SC_ASSETS?.fotos?.[p.nome];
+        return `<div class="esc-p" title="${p.nome}${p.num!=null?" · nº "+p.num:""}">
+          <div class="esc-dot">${foto ? `<img src="${foto}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${p.num ?? ""}'}))">` : `<span>${p.num ?? ""}</span>`}</div>
+          <div class="esc-nm">${p.nome}</div>
+        </div>`;
+      }).join("")}</div>`).join("");
+    return `<div class="qt-panel ${side}">
+      <div class="qt-head">${teamCrest(nome)}<span class="nm">${nome}</span></div>
+      <div class="qt-sub">${e.formacao || "formação —"}${e.tecnico ? ` · téc. ${e.tecnico}` : ""} · último jogo: × ${e.adv} (${dataBR(e.ts)})</div>
+      <div class="esc-pitch ${side}">${rowsHTML}</div>
+    </div>`;
+  };
+  return `
+    <div class="rx-sample" style="margin:2px 0 12px">escalação do <b>último jogo</b> de cada time — a confirmada sai ~1h antes do apito · receba na hora no <a href="https://t.me/apitoualertas" target="_blank" rel="noopener" style="color:var(--acc); font-weight:700">t.me/apitoualertas</a> 🔔</div>
+    <div class="qt-grid">
+      ${painel(fx.homeId, fx.home, "home")}
+      ${painel(fx.awayId, fx.away, "away")}
+    </div>`;
+}
+
 function renderJogo(){
   const fi = state.jogoAberto ?? 0;
   const fx = FIXTURES[fi];
@@ -3129,7 +3191,7 @@ function renderJogo(){
 
   // ----- Abas grandes: a pergunta que o usuário tem na cabeça -----
   const tabBtn = (k, txt) => `<button class="jogo-tab ${tab===k?'on':''}" onclick="setJogoTab('${k}')">${txt}</button>`;
-  const tabsRow = `<div class="jogo-tabs">${tabBtn("stats","📊 Números")}${tabBtn("h2h","⚔️ Confronto direto")}${tabBtn("quentes","🔥 Quentes")}</div>`;
+  const tabsRow = `<div class="jogo-tabs">${tabBtn("stats","📊 Números")}${tabBtn("h2h","⚔️ Confronto")}${tabBtn("quentes","🔥 Quentes")}${tabBtn("esc","📋 Escalações")}</div>`;
 
   // ----- Filtros com rótulo-pergunta (só os que fazem sentido na aba) -----
   const labelComp = ehContinental ? "Só continentais" : `Só ${fx.competicao}`;
@@ -3139,21 +3201,23 @@ function renderJogo(){
     <div class="filters">${chipJ(5)}${chipJ(10)}${chipJ(15)}${ehLiga ? chipJ(30) : ""}</div>`;
   const grupoEscopo = `<div class="qlabel">Quais jogos?</div>
     <div class="filters">${chipE("comp", labelComp)}${chipE("geral", "Todos os jogos")}</div>`;
-  const filtrosRow = `<div class="jogo-filtros">${tab === "stats" ? grupoJanela : ""}${grupoEscopo}</div>`;
+  const filtrosRow = tab === "esc" ? "" : `<div class="jogo-filtros">${tab === "stats" ? grupoJanela : ""}${grupoEscopo}</div>`;
 
   const teamsHead = `
     <div class="rx-teams-head">
       <div class="rx-team">${teamCrest(fx.home)}<span class="tn">${fx.home}</span><span class="rx-dot home"></span></div>
-      <span class="rx-vs">${tab === "h2h" ? "confronto direto" : tab === "quentes" ? "forma recente" : "média por jogo"}</span>
+      <span class="rx-vs">${tab === "h2h" ? "confronto direto" : tab === "quentes" ? "forma recente" : tab === "esc" ? "escalações" : "média por jogo"}</span>
       <div class="rx-team away"><span class="rx-dot away"></span><span class="tn">${fx.away}</span>${teamCrest(fx.away)}</div>
     </div>`;
 
-  // ----- Corpo do card: confronto direto OU quentes OU médias comparadas -----
+  // ----- Corpo do card: confronto direto OU quentes OU escalações OU médias -----
   let corpo;
   if (tab === "h2h"){
     corpo = h2hCorpo(fx, state.rxEscopo, fi);
   } else if (tab === "quentes"){
     corpo = quentesCorpo(fx, state.rxEscopo, fi);
+  } else if (tab === "esc"){
+    corpo = escalacoesCorpo(fx);
   } else {
     const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo);
     const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo);
