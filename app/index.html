@@ -3427,8 +3427,34 @@ function renderArbitro(){
       </div>`;
   }
 
-  // extrato jogo a jogo
+  // ----- o árbitro COM ESTES TIMES (filtra o histórico pelos nomes) -----
   const dataBR = ts => { const [y,m,d] = ts.split("-"); return `${d}/${m}/${y.slice(2)}`; };
+  const todos = arb.ultimos || [];
+  const linhaJogo = g => `
+      <div class="jg-game" style="grid-template-columns:66px 1fr auto">
+        <span class="jg-date">${dataBR(g.ts)}</span>
+        <span class="jg-adv">${g.jogo}</span>
+        <span class="jg-vals"><b class="amber tnum">${g.am}</b> 🟨${g.vm ? ` · <b class="tnum" style="color:#E05A4E">${g.vm}</b> 🟥` : ""} · <b class="tnum">${g.faltas}</b> faltas</span>
+      </div>`;
+  const grupoTime = (titulo, jogos) => {
+    if (!jogos.length) return "";
+    const med = sel => (jogos.reduce((a, g) => a + sel(g), 0) / jogos.length).toFixed(1).replace(".", ",");
+    return `
+      <div class="section-h" style="margin-top:20px"><span class="lbl">${titulo}</span><span class="count tnum">${jogos.length} jogo${jogos.length===1?"":"s"} · ${med(g=>g.am)} 🟨/jogo · ${med(g=>g.faltas)} faltas/jogo</span></div>
+      <div class="jg-list">${jogos.map(linhaJogo).join("")}</div>`;
+  };
+  const comAmbos = todos.filter(g => g.jogo.includes(fx.home) && g.jogo.includes(fx.away));
+  const comCasa = todos.filter(g => g.jogo.includes(fx.home) && !g.jogo.includes(fx.away));
+  const comFora = todos.filter(g => g.jogo.includes(fx.away) && !g.jogo.includes(fx.home));
+  const comTimes = (comAmbos.length || comCasa.length || comFora.length) ? `
+    <div class="rx-card" style="margin-top:18px">
+      <div class="rx-group-t">👨‍⚖️ ${arb.nome.split(" ")[0]} com estes times (últimos 12 meses)</div>
+      ${grupoTime(`⚔️ Apitou ${fx.home} x ${fx.away}`, comAmbos)}
+      ${grupoTime(`Com o ${fx.home}`, comCasa)}
+      ${grupoTime(`Com o ${fx.away}`, comFora)}
+    </div>` : "";
+
+  // extrato jogo a jogo (geral)
   const listaJogos = (jan === "base" ? (arb.ultimos || []).slice(0, 10) : v.jogos);
   const extrato = listaJogos.length ? `
     <div class="section-h" style="margin-top:24px"><span class="lbl">Jogo a jogo</span><span class="count tnum">${listaJogos.length} jogos</span></div>
@@ -3456,6 +3482,7 @@ function renderArbitro(){
       ${v.penaltis != null ? tile("Pênaltis / jogo", nb(v.penaltis)) : tile("Jogos na janela", v.n ?? "—")}
     </div>
     ${splitHTML}
+    ${comTimes}
     <button class="h2h-cardbtn" onclick="abrirCardArbitro()" style="margin-top:16px">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4M8 11l4 4 4-4M12 15V3"/></svg>
       Gerar card
