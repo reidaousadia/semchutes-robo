@@ -14,8 +14,8 @@ jobs:
           python-version: '3.12'
       - name: Coleta completa
         env:
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
-        run: python3 robo/coleta.py
+          SPORTMONKS_TOKEN: ${{ secrets.SPORTMONKS_TOKEN }}
+        run: python3 robo/coleta_sm.py
       - name: Publica no Netlify
         env:
           NETLIFY_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
