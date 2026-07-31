@@ -339,7 +339,8 @@ for tid, tname in teams.items():
                                             "formacao": formacao, "tecnico": tecnico, "xi": xi}
 print(f"escalações: {len(escalacoes['ultimas'])}", flush=True)
 
-# árbitro designado + médias por temporada (quando já anunciado)
+# árbitro designado + perfil rico (agregado de TODAS as temporadas da base,
+# com split casa/fora dos amarelos — leitura de mercado de cartões)
 arbitros = {}
 ref_stats_cache = {}
 for fx in semana:
@@ -350,22 +351,29 @@ for fx in semana:
     rid = ref["id"]
     if rid not in ref_stats_cache:
         rd = sm(f"/referees/{rid}", include="statistics.details.type").get("data") or {}
-        medias = {}
-        stats_temporadas = rd.get("statistics", [])
-        if stats_temporadas:
-            ult = stats_temporadas[-1]
-            for dd in (ult.get("details") or []):
+        jogos = am = am_c = am_f = vm = faltas = pen = varm = amrl = 0
+        for st in rd.get("statistics", []):
+            for dd in (st.get("details") or []):
                 nome_t = ((dd.get("type") or {}).get("name") or "").lower()
                 val = dd.get("value") or {}
-                if "yellowcard" in nome_t and isinstance(val, dict):
-                    medias["amarelos"] = (val.get("all") or {}).get("average")
-                elif nome_t == "fouls" and isinstance(val, dict):
-                    medias["faltas"] = val.get("average")
-                elif "redcard" in nome_t and isinstance(val, dict):
-                    medias["vermelhos"] = (val.get("all") or {}).get("average")
-                elif "season matches" in nome_t and isinstance(val, dict):
-                    medias["jogos"] = val.get("count")
-        ref_stats_cache[rid] = {"nome": ref.get("display_name") or ref.get("name"), **medias}
+                if not isinstance(val, dict): continue
+                if "season matches" in nome_t: jogos += val.get("count") or 0
+                elif nome_t == "yellowcards":
+                    am += (val.get("all") or {}).get("count") or 0
+                    am_c += (val.get("home") or {}).get("count") or 0
+                    am_f += (val.get("away") or {}).get("count") or 0
+                elif nome_t == "redcards": vm += (val.get("all") or {}).get("count") or 0
+                elif "yellowred" in nome_t: amrl += (val.get("all") or {}).get("count") or 0
+                elif nome_t == "fouls": faltas += val.get("count") or 0
+                elif nome_t == "penalties": pen += (val.get("all") or {}).get("count") or 0
+                elif "var" in nome_t: varm += val.get("count") or 0
+        perfil = {"id": rid, "nome": ref.get("display_name") or ref.get("name"), "jogos": jogos}
+        if jogos:
+            r2 = lambda x: round(x, 2)
+            perfil.update({"amarelos": r2(am/jogos), "amarelosCasa": r2(am_c/jogos),
+                           "amarelosFora": r2(am_f/jogos), "vermelhos": r2((vm+amrl)/jogos),
+                           "faltas": r2(faltas/jogos), "penaltis": r2(pen/jogos), "var": r2(varm/jogos)})
+        ref_stats_cache[rid] = perfil
     arbitros[str(fx["id"])] = ref_stats_cache[rid]
 print(f"árbitros designados: {len(arbitros)}", flush=True)
 

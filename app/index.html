@@ -744,9 +744,13 @@
   @media (max-width: 520px){ .jogo-tab { font-size: 12.5px; padding: 10px 2px; } }
   /* faixa do árbitro na tela do jogo */
   .arb-bar { margin-top: 10px; padding: 9px 13px; font-size: 13px; color: var(--text-dim);
-    background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 9px; }
+    background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 9px;
+    width: 100%; text-align: left; font-family: var(--f-ui); display: block; }
+  .arb-bar.click { cursor: pointer; appearance: none; }
+  .arb-bar.click:hover { border-color: var(--acc); background: var(--acc-soft); }
   .arb-bar b { color: var(--text); }
   .arb-bar span { color: var(--muted); font-size: 12px; }
+  .arb-go { float: right; color: var(--acc); font-weight: 700; font-size: 12px !important; }
 
   /* rótulo-pergunta dos grupos de filtro */
   .jogo-filtros { margin-top: 10px; }
@@ -1427,10 +1431,10 @@ function go(view, playerId, qiFixture, qiPlayer, jogoIdx){
     // ao abrir um jogo: aba Números · Últimos 10 · só a competição do jogo
     state.jogoTab = "stats"; state.rxEscopo = "comp"; state.rxJanela = 10; state.h2hSub = "ult"; }
   const navMap = {
-    "nav-oportunidades": ["oportunidades","jogo","jogos"],
+    "nav-oportunidades": ["oportunidades","jogo","jogos","arbitro"],
     "nav-search": ["search","jogador"],
     "nav-ranking": ["ranking"],
-    "bnav-hoje": ["oportunidades","jogo","jogos"],
+    "bnav-hoje": ["oportunidades","jogo","jogos","arbitro"],
     "bnav-search": ["search","jogador"],
     "bnav-ranking": ["ranking"],
   };
@@ -3255,6 +3259,56 @@ function escalacoesCorpo(fx, fi){
     </div>`;
 }
 
+/* ---------- PERFIL DO ÁRBITRO (mercado de cartões) ---------- */
+function renderArbitro(){
+  const fi = state.jogoAberto ?? 0;
+  const fx = FIXTURES[fi];
+  const arb = fx ? (SEM.arbitros || {})[String(fx.id)] : null;
+  if (!arb){ go('jogo', null, null, null, fi); return; }
+  const nb = v => v != null ? String(v).replace(".", ",") : "—";
+  const tile = (k, v, cls="") => `<div class="tile ${cls}"><div class="k">${k}</div><div class="big tnum" style="font-size:34px">${v}</div></div>`;
+
+  // split casa × fora dos amarelos (a leitura que o apostador de cartões quer)
+  let splitHTML = "";
+  if (arb.amarelosCasa != null && arb.amarelosFora != null){
+    const c = arb.amarelosCasa, f = arb.amarelosFora, max = Math.max(c, f, 0.001);
+    const vies = f > c * 1.15 ? "tende a dar MAIS cartão pro visitante" : c > f * 1.15 ? "tende a dar MAIS cartão pro mandante" : "equilibrado entre mandante e visitante";
+    splitHTML = `
+      <div class="rx-card" style="margin-top:18px">
+        <div class="rx-group-t">Amarelos por jogo · mandante × visitante</div>
+        <div class="rx-row">
+          <div class="rx-side"><span class="rx-val tnum">${nb(c)}</span><div class="rx-bar"><div class="rx-fill home" style="width:${c/max*100}%"></div></div></div>
+          <div class="rx-label">🟨 amarelos</div>
+          <div class="rx-side away"><div class="rx-bar"><div class="rx-fill away" style="width:${f/max*100}%"></div></div><span class="rx-val tnum">${nb(f)}</span></div>
+        </div>
+        <div class="rx-sample" style="margin-top:8px">esquerda = pro time da CASA · direita = pro VISITANTE · leitura: ${vies}</div>
+      </div>`;
+  }
+
+  el.innerHTML = `
+    <button class="back" onclick="go('jogo', null, null, null, ${fi})"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg> ${fx.home} x ${fx.away}</button>
+    <div class="phead">
+      <div class="avatar" style="${avatarStyle(arb.nome.length*7)}; font-size:26px">👨‍⚖️</div>
+      <div style="flex:1; min-width:200px">
+        <h1>${arb.nome}</h1>
+        <div class="pmeta">Árbitro <span class="dot"></span> <span class="badge">${arb.jogos || "—"} jogos na base</span> <span class="badge">apita ${fx.home} x ${fx.away}</span></div>
+      </div>
+    </div>
+    <div class="tiles" style="margin-top:22px">
+      ${tile("🟨 Amarelos / jogo", nb(arb.amarelos), "hero-a")}
+      ${tile("Faltas / jogo", nb(arb.faltas), "hero-b")}
+      ${tile("🟥 Vermelhos / jogo", nb(arb.vermelhos))}
+      ${tile("Pênaltis / jogo", nb(arb.penaltis))}
+    </div>
+    ${splitHTML}
+    <div class="dna-panel">
+      ${arb.var != null ? `<div class="dna-row"><span class="k">Intervenções de VAR por jogo</span><span class="v flat tnum">${nb(arb.var)}</span></div>` : ""}
+      <div class="dna-row"><span class="k">Amostra: todas as temporadas disponíveis na base (todas as competições que ele apitou)</span><span class="v flat tnum">${arb.jogos || "—"} jogos</span></div>
+    </div>
+    ${sourceNoteQI()}
+  `;
+}
+
 function renderJogo(){
   const fi = state.jogoAberto ?? 0;
   const fx = FIXTURES[fi];
@@ -3317,10 +3371,10 @@ function renderJogo(){
     }
   }
 
-  // faixa do árbitro (quando já designado) — ouro pro mercado de cartões
+  // faixa do árbitro (quando já designado) — clicável → perfil completo
   const arb = (SEM.arbitros || {})[String(fx.id)];
   const numBR = v => v != null ? String(v).replace(".", ",") : null;
-  const arbBar = arb && arb.nome ? `<div class="arb-bar">👨‍⚖️ Árbitro: <b>${arb.nome}</b>${arb.amarelos != null ? ` · 🟨 ${numBR(arb.amarelos)} amarelos/jogo` : ""}${arb.faltas != null ? ` · ${numBR(arb.faltas)} faltas/jogo` : ""}${arb.jogos ? ` <span>(${arb.jogos} jogo${arb.jogos===1?"":"s"} na temporada)</span>` : ""}</div>` : "";
+  const arbBar = arb && arb.nome ? `<button class="arb-bar click" onclick="go('arbitro')">👨‍⚖️ Árbitro: <b>${arb.nome}</b>${arb.amarelos != null ? ` · 🟨 ${numBR(arb.amarelos)} amarelos/jogo` : ""}${arb.faltas != null ? ` · ${numBR(arb.faltas)} faltas/jogo` : ""}${arb.jogos ? ` <span>(${arb.jogos} jogos na base)</span>` : ""}<span class="arb-go">ver perfil ›</span></button>` : "";
 
   const raioxBloco = `${tabsRow}${arbBar}${filtrosRow}<div class="rx-card" style="margin-top:14px">${teamsHead}${corpo}</div>`;
 
@@ -3488,6 +3542,7 @@ function render(){
   if (state.view==="oportunidades") renderOportunidades();
   else if (state.view==="jogador") renderJogadorSimples();
   else if (state.view==="jogo") renderJogo();
+  else if (state.view==="arbitro") renderArbitro();
   else if (state.view==="search") renderSearch();
   else renderRanking();
 }
