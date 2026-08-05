@@ -2168,6 +2168,134 @@ function carregaImg(src){
     img.src = src;
   });
 }
+/* ---------- ícones vetoriais dos cards ----------
+   O canvas mede errado a largura de emojis (sequências compostas), o que
+   desalinha texto centralizado — e emoji é estética de teclado, não da marca.
+   Ícones desenhados: largura exata + identidade própria. */
+function icoCartao(x, x0, cy, h, cor, tilt){
+  // cartão de arbitragem, levemente inclinado
+  const w = h * 0.72;
+  x.save(); x.translate(x0 + w/2 + 2, cy); x.rotate(tilt ?? -0.12);
+  x.fillStyle = cor;
+  x.beginPath(); x.roundRect(-w/2, -h/2, w, h, h * 0.14); x.fill();
+  x.restore();
+  return w + 4;
+}
+function icoCartaoDuplo(x, x0, cy, h){
+  // leque do árbitro: vermelho atrás, amarelo na frente
+  icoCartao(x, x0 + h*0.30, cy - 1, h, "#E4574D", 0.16);
+  icoCartao(x, x0, cy + 1, h, "#F5C542", -0.14);
+  return h * 1.06;
+}
+function icoApito(x, x0, cy, h, cor){
+  // apito da marca em miniatura: câmara + bocal curto e grosso, inclinado
+  const r = h * 0.42;
+  x.save(); x.translate(x0 + r + 1, cy - r*0.15); x.rotate(0.28);
+  x.fillStyle = cor;
+  x.beginPath(); x.roundRect(-r*0.2, -r*0.62, h*0.78, r*1.24, r*0.32); x.fill();
+  x.beginPath(); x.arc(0, 0, r, 0, Math.PI*2); x.fill();
+  x.fillStyle = "#0B120D";
+  x.beginPath(); x.arc(-r*0.02, r*0.08, r*0.36, 0, Math.PI*2); x.fill();
+  x.restore();
+  return h * 1.1;
+}
+function icoFogo(x, x0, cy, h, cor){
+  // chama: ponta inclinada pra direita + recorte interno
+  const w = h * 0.82;
+  x.save(); x.translate(x0 + w/2, cy);
+  x.fillStyle = cor;
+  x.beginPath();
+  x.moveTo(w*0.28, -h*0.50);
+  x.bezierCurveTo(w*0.30, -h*0.16, w*0.52, -h*0.10, w*0.50, h*0.12);
+  x.arc(0, h*0.12, w*0.50, 0, Math.PI, false);
+  x.bezierCurveTo(-w*0.54, -h*0.02, -w*0.10, -h*0.14, w*0.28, -h*0.50);
+  x.fill();
+  x.fillStyle = "#0B120D";
+  x.beginPath();
+  x.moveTo(w*0.02, h*0.02);
+  x.bezierCurveTo(w*0.24, h*0.16, w*0.20, h*0.34, 0, h*0.42);
+  x.bezierCurveTo(-w*0.20, h*0.34, -w*0.24, h*0.16, w*0.02, h*0.02);
+  x.fill();
+  x.restore();
+  return w;
+}
+function icoBola(x, x0, cy, h){
+  // bola: círculo claro + pentágono e gomos
+  const r = h * 0.46;
+  x.save(); x.translate(x0 + r, cy);
+  x.fillStyle = "#EAF2EC";
+  x.beginPath(); x.arc(0, 0, r, 0, Math.PI*2); x.fill();
+  x.fillStyle = "#0B120D";
+  x.beginPath();
+  for (let i = 0; i < 5; i++){
+    const a = -Math.PI/2 + i * 2*Math.PI/5;
+    i ? x.lineTo(Math.cos(a)*r*0.42, Math.sin(a)*r*0.42)
+      : x.moveTo(Math.cos(a)*r*0.42, Math.sin(a)*r*0.42);
+  }
+  x.closePath(); x.fill();
+  x.strokeStyle = "#0B120D"; x.lineWidth = Math.max(1.5, h*0.06);
+  for (let i = 0; i < 5; i++){
+    const a = -Math.PI/2 + i * 2*Math.PI/5;
+    x.beginPath();
+    x.moveTo(Math.cos(a)*r*0.42, Math.sin(a)*r*0.42);
+    x.lineTo(Math.cos(a)*r*0.95, Math.sin(a)*r*0.95);
+    x.stroke();
+  }
+  x.restore();
+  return r*2;
+}
+function icoEscudo(x, x0, cy, h, cor){
+  // escudo de defesa
+  const w = h * 0.82;
+  x.save(); x.translate(x0 + w/2, cy - h*0.5);
+  x.fillStyle = cor;
+  x.beginPath();
+  x.moveTo(-w/2, h*0.06);
+  x.quadraticCurveTo(0, h*0.16, w/2, h*0.06);
+  x.lineTo(w/2, h*0.55);
+  x.quadraticCurveTo(w/2, h*0.84, 0, h*0.98);
+  x.quadraticCurveTo(-w/2, h*0.84, -w/2, h*0.55);
+  x.closePath(); x.fill();
+  x.restore();
+  return w;
+}
+function icoFloco(x, x0, cy, h, cor){
+  // floco de neve: 6 hastes com galhos
+  const r = h * 0.46;
+  x.save(); x.translate(x0 + r, cy);
+  x.strokeStyle = cor; x.lineWidth = Math.max(2, h*0.09); x.lineCap = "round";
+  for (let i = 0; i < 6; i++){
+    const a = i * Math.PI / 3;
+    x.beginPath(); x.moveTo(0, 0); x.lineTo(Math.cos(a)*r, Math.sin(a)*r); x.stroke();
+    const bx = Math.cos(a)*r*0.6, by = Math.sin(a)*r*0.6;
+    for (const s of [-1, 1]){
+      const a2 = a + s * Math.PI/3;
+      x.beginPath(); x.moveTo(bx, by);
+      x.lineTo(bx + Math.cos(a2)*r*0.30, by + Math.sin(a2)*r*0.30); x.stroke();
+    }
+  }
+  x.restore();
+  return r*2;
+}
+function icoSeq(x, icon, x0, cy, h){
+  // mapeia o ícone semântico das sequências pro desenho vetorial
+  if (icon === "🔥") return icoFogo(x, x0, cy, h, "#FF8A3D");
+  if (icon === "⚽") return icoBola(x, x0, cy, h);
+  if (icon === "🛡️") return icoEscudo(x, x0, cy, h, "#2FD08A");
+  if (icon === "🥶") return icoFloco(x, x0, cy, h, "#7FB8E8");
+  return 0;
+}
+function tituloIco(x, texto, cx, y, icoW, gap, desenha){
+  // centraliza o grupo [ícone + texto] medindo só o texto (medição confiável)
+  const wT = x.measureText(texto).width;
+  const x0 = cx - (icoW + gap + wT) / 2;
+  const fs = x.fillStyle, ta = x.textAlign;
+  desenha(x0);
+  x.fillStyle = fs; x.textAlign = "left";
+  x.fillText(texto, x0 + icoW + gap, y);
+  x.textAlign = ta;
+}
+
 async function desenharCard(){
   const c = state.card;
   if (c.tipo === "h2h") return desenharH2H();
@@ -2614,7 +2742,8 @@ async function desenharQuentes(){
   }
 
   x.font = `700 26px ${MONO}`; x.fillStyle = "#2FD08A";
-  x.fillText("🔥 QUENTES · FORMA RECENTE", cx, Y(oSubtitle));
+  tituloIco(x, "QUENTES · FORMA RECENTE", cx, Y(oSubtitle), 24, 12,
+            x0 => icoFogo(x, x0, Y(oSubtitle), 30, "#2FD08A"));
   x.font = `500 22px ${MONO}`; x.fillStyle = "#93A399";
   x.fillText(c.contexto, cx, Y(oContext));
 
@@ -2650,8 +2779,9 @@ async function desenharQuentes(){
     x.textAlign = "left";
     f.seqs.forEach((s, i) => {
       const y = Y(seq0 + i * seqStep);
+      const wI = icoSeq(x, s.icon, x0, y, 28);
       x.font = `700 26px ${UI}`; x.fillStyle = "#EAF2EC";
-      x.fillText(`${s.icon} ${s.txt}`, x0, y);
+      x.fillText(s.txt, x0 + wI + 12, y);
     });
     // tendências (70%+ em verde)
     f.tend.forEach((t, i) => {
@@ -2851,7 +2981,8 @@ async function desenharArbitro(){
     x.fillText(nome === c.nome ? nome : nome + "…", cx, yT);
   }
   x.font = `700 26px ${MONO}`; x.fillStyle = "#F0B14A";
-  x.fillText("PERFIL DO ÁRBITRO", cx, Y(oSub));
+  tituloIco(x, "PERFIL DO ÁRBITRO", cx, Y(oSub), 30, 12,
+            x0 => icoCartaoDuplo(x, x0, Y(oSub), 28));
   x.font = `500 22px ${MONO}`; x.fillStyle = "#93A399";
   x.fillText(c.contexto, cx, Y(oCtx));
 
@@ -2861,8 +2992,10 @@ async function desenharArbitro(){
   x.fillStyle = "#F0B14A"; x.fillText(fmt(c.amarelos), cx - off, Y(oNum));
   x.fillStyle = "#2FD08A"; x.fillText(fmt(c.faltas), cx + off, Y(oNum));
   x.font = `700 22px ${MONO}`; x.fillStyle = "#93A399";
-  x.fillText("🟨 AMARELOS / JOGO", cx - off, Y(oLbl));
-  x.fillText("FALTAS / JOGO", cx + off, Y(oLbl));
+  tituloIco(x, "AMARELOS / JOGO", cx - off, Y(oLbl), 18, 10,
+            x0 => icoCartao(x, x0, Y(oLbl), 24, "#F5C542"));
+  tituloIco(x, "FALTAS / JOGO", cx + off, Y(oLbl), 30, 10,
+            x0 => icoApito(x, x0, Y(oLbl), 26, "#93A399"));
 
   // split casa × fora
   if (temSplit){
@@ -2883,22 +3016,32 @@ async function desenharArbitro(){
     x.textAlign = "center";
   }
 
-  // extrato: 🟨N · jogo · data
+  // extrato: N + cartão desenhado · jogo · data
   const dataBR = ts => { const [y,m,d] = ts.split("-"); return `${d}/${m}`; };
+  const chIco = 24, gIco = 5, cw = chIco * 0.72 + 4;
   c.jogos.forEach((g, i) => {
     const y = Y(ex0 + i * exStep);
-    const numTxt = `${g.am}🟨${g.vm ? " " + g.vm + "🟥" : ""}`;
     let jogo = g.jogo;
     x.font = `500 25px ${UI}`;
     while (x.measureText(jogo).width > 560 && jogo.length > 10) jogo = jogo.slice(0, -1);
     const meio = `  ${jogo === g.jogo ? jogo : jogo + "…"}`;
     const fim = `  · ${dataBR(g.ts)} · ${g.faltas} faltas`;
-    x.font = `800 27px ${UI}`; const wN = x.measureText(numTxt).width;
+    x.font = `800 27px ${UI}`;
+    const wAm = x.measureText(String(g.am)).width;
+    const wVm = g.vm ? x.measureText(String(g.vm)).width : 0;
+    const wN = wAm + gIco + cw + (g.vm ? 12 + wVm + gIco + cw : 0);
     x.font = `500 25px ${UI}`; const wM = x.measureText(meio).width;
     x.font = `500 21px ${MONO}`; const wF = x.measureText(fim).width;
     let cur = cx - (wN + wM + wF) / 2;
     x.textAlign = "left";
-    x.font = `800 27px ${UI}`; x.fillStyle = "#F0B14A"; x.fillText(numTxt, cur, y); cur += wN;
+    x.font = `800 27px ${UI}`; x.fillStyle = "#F0B14A";
+    x.fillText(String(g.am), cur, y); cur += wAm + gIco;
+    icoCartao(x, cur, y, chIco, "#F5C542", -0.10); cur += cw;
+    if (g.vm){
+      cur += 12;
+      x.fillStyle = "#E4574D"; x.fillText(String(g.vm), cur, y); cur += wVm + gIco;
+      icoCartao(x, cur, y, chIco, "#E4574D", -0.10); cur += cw;
+    }
     x.font = `500 25px ${UI}`; x.fillStyle = "#EAF2EC"; x.fillText(meio, cur, y); cur += wM;
     x.font = `500 21px ${MONO}`; x.fillStyle = "#64756B"; x.fillText(fim, cur, y);
     x.textAlign = "center";
