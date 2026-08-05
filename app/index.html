@@ -2138,6 +2138,31 @@ function irEstatistica(fi, sel){
   abrirCard(fi, key, label, rxH[key], rxA[key], dec, sufixo);
 }
 
+/* Card do modo clube único: uma estatística do clube no recorte de mando */
+function abrirCardSolo(fi, key){
+  const fx = FIXTURES[fi];
+  const emCasa = state.rxMando === "casaH";
+  const tid = emCasa ? fx.homeId : fx.awayId;
+  const nome = emCasa ? fx.home : fx.away;
+  const meta = STAT_META[key];
+  if (!meta) return;
+  const [label, dec, sufixo] = meta;
+  const rx = computeRx(tid, fx.ligaId, state.rxJanela, state.rxEscopo, emCasa);
+  if (!rx || rx[key] == null) return;
+  const ehContinental = ehContinentalLiga(fx.ligaId);
+  let contexto = `média dos últimos ${rx.jogos} jogos ${emCasa ? "em casa" : "fora de casa"}`;
+  if (state.rxEscopo === "comp") contexto += ehContinental ? " · copas continentais" : ` · ${fx.competicao}`;
+  if (rx.inclui2025) contexto += " · inclui temporada 2025";
+  const sel = STAT_SEL[key];
+  const extrato = sel
+    ? getJogosRx(tid, fx.ligaId, state.rxJanela, state.rxEscopo, emCasa)
+        .map(j => ({ v: sel(j), adv: j.advNome || "?" })).filter(e => e.v != null)
+    : [];
+  state.card = { tipo: "timeSolo", formato: "sticker", fx, nome, emCasa, key, label,
+                 valor: rx[key], dec, sufixo, contexto, extrato };
+  montarCardModal();
+}
+
 /* Card postável do confronto direto (retrospecto + tendências + últimos resultados) */
 function abrirCardH2H(fi){
   const fx = FIXTURES[fi];
@@ -2358,6 +2383,7 @@ async function desenharCard(){
   if (c.tipo === "quentes") return desenharQuentes();
   if (c.tipo === "jogador") return desenharJogador();
   if (c.tipo === "arbitro") return desenharArbitro();
+  if (c.tipo === "timeSolo") return desenharTimeSolo();
   if (c.formato === "sticker") return desenharSticker();
   const W = 1080, H = c.formato === "story" ? 1920 : 1350;
   const cv = document.getElementById("cardCanvas");
@@ -2982,6 +3008,105 @@ async function desenharJogador(){
   x.textAlign = "center";
 }
 
+/* Card de UM clube só (modo mando): número gigante + extrato jogo a jogo */
+async function desenharTimeSolo(){
+  const c = state.card;
+  const UI = "-apple-system, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif";
+  const MONO = "'SF Mono', 'Roboto Mono', Menlo, monospace";
+  const W = 1080, cx = W / 2;
+  const cor = c.emCasa ? "#2FD08A" : "#F0B14A";
+  const n = Math.min(c.extrato.length, 15);
+
+  const oHeader = 96, oSub = 178, oCtx = 220, oNum = 340, oLbl = 424;
+  const ex0 = 500, exStep = 46;
+  const oFooter = ex0 + n * exStep + (n ? 10 : -24), panelH = oFooter + 42;
+
+  const sticker = c.formato === "sticker";
+  const H = sticker ? panelH + 48 : (c.formato === "story" ? 1920 : 1350);
+  const cv = document.getElementById("cardCanvas");
+  if (!cv) return;
+  cv.width = W; cv.height = H;
+  const x = cv.getContext("2d");
+  x.clearRect(0, 0, W, H);
+
+  if (!sticker){
+    const g = x.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#0D1712"); g.addColorStop(0.5, "#0A0F0C"); g.addColorStop(1, "#07100B");
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+    const glow = x.createRadialGradient(W/2, H*0.3, 60, W/2, H*0.3, W*0.8);
+    glow.addColorStop(0, c.emCasa ? "rgba(47,208,138,0.12)" : "rgba(240,177,74,0.12)");
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    x.fillStyle = glow; x.fillRect(0, 0, W, H);
+  }
+
+  const px = 24, pw = W - 48;
+  const py = sticker ? 24 : Math.max(24, Math.round((H - panelH) / 2));
+  x.fillStyle = "rgba(8,13,10,0.92)";
+  x.beginPath(); x.roundRect(px, py, pw, panelH, 44); x.fill();
+  x.strokeStyle = c.emCasa ? "rgba(47,208,138,0.45)" : "rgba(240,177,74,0.45)"; x.lineWidth = 3;
+  x.beginPath(); x.roundRect(px, py, pw, panelH, 44); x.stroke();
+  const Y = o => py + o;
+  x.textAlign = "center"; x.textBaseline = "middle";
+
+  // header: escudo + nome (centralizado por medição de texto, escudo em posição calculada)
+  {
+    const yT = Y(oHeader);
+    const im = await carregaImg(SC_ASSETS.escudos?.[c.nome]);
+    let size = 44;
+    while (size > 26){
+      x.font = `800 ${size}px ${UI}`;
+      if (x.measureText(c.nome).width <= pw - 220) break;
+      size -= 2;
+    }
+    const wN = x.measureText(c.nome).width, cr = 68, gap = 16;
+    const x0 = cx - (cr + gap + wN) / 2;
+    x.save();
+    x.beginPath(); x.roundRect(x0, yT - cr/2, cr, cr, 16); x.clip();
+    if (im) x.drawImage(im, x0, yT - cr/2, cr, cr);
+    else { x.fillStyle = "#1E2A23"; x.fillRect(x0, yT - cr/2, cr, cr); }
+    x.restore();
+    x.fillStyle = "#EAF2EC"; x.textAlign = "left";
+    x.fillText(c.nome, x0 + cr + gap, yT);
+    x.textAlign = "center";
+  }
+  x.font = `700 26px ${MONO}`; x.fillStyle = cor;
+  x.fillText(c.emCasa ? "SÓ JOGOS EM CASA" : "SÓ JOGOS FORA DE CASA", cx, Y(oSub));
+  x.font = `500 22px ${MONO}`; x.fillStyle = "#93A399";
+  x.fillText(c.contexto, cx, Y(oCtx));
+
+  // número gigante + rótulo
+  x.font = `800 150px ${UI}`; x.fillStyle = cor;
+  x.fillText(fmt(c.valor, c.dec) + c.sufixo, cx, Y(oNum));
+  x.font = `700 24px ${MONO}`; x.fillStyle = "#93A399";
+  x.fillText(`${c.label.toUpperCase()} / JOGO`, cx, Y(oLbl));
+
+  // extrato: valor × adversário
+  c.extrato.slice(0, 15).forEach((e, i) => {
+    const y = Y(ex0 + i * exStep);
+    const vTxt = fmt(e.v, Number.isInteger(e.v) ? 0 : c.dec) + c.sufixo;
+    let adv = ` × ${e.adv}`;
+    x.font = `500 25px ${UI}`;
+    while (x.measureText(adv).width > 560 && adv.length > 8) adv = adv.slice(0, -1);
+    x.font = `800 27px ${UI}`; const wV = x.measureText(vTxt).width;
+    x.font = `500 25px ${UI}`; const wA = x.measureText(adv).width;
+    let cur = cx - (wV + wA) / 2;
+    x.textAlign = "left";
+    x.font = `800 27px ${UI}`; x.fillStyle = cor; x.fillText(vTxt, cur, y); cur += wV;
+    x.font = `500 25px ${UI}`; x.fillStyle = "#EAF2EC"; x.fillText(adv, cur, y);
+    x.textAlign = "center";
+  });
+
+  // rodapé
+  const yRod = Y(oFooter);
+  x.textAlign = "right"; x.font = `800 26px ${UI}`;
+  const wEx = x.measureText("!").width;
+  x.fillStyle = "#2FD08A"; x.fillText("!", px+pw-40, yRod);
+  x.fillStyle = "#FFFFFF"; x.fillText("APITOU", px+pw-40-wEx, yRod);
+  x.textAlign = "left"; x.font = `500 22px ${MONO}`; x.fillStyle = "#93A399";
+  x.fillText("os números falam · mando de campo", px+40, yRod);
+  x.textAlign = "center";
+}
+
 async function desenharArbitro(){
   const c = state.card;
   const UI = "-apple-system, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif";
@@ -3117,7 +3242,7 @@ async function desenharArbitro(){
 function baixarCard(){
   const cv = document.getElementById("cardCanvas");
   const c = state.card;
-  const nome = ((c.tipo === "jogador" || c.tipo === "arbitro")
+  const nome = ((c.tipo === "jogador" || c.tipo === "arbitro" || c.tipo === "timeSolo")
     ? `apitou-${c.nome}-${c.label}`
     : `apitou-${c.fx.home}-x-${c.fx.away}-${c.label}`).toLowerCase().replace(/[^a-z0-9]+/g, "-");
   cv.toBlob(blob => {
@@ -3945,29 +4070,23 @@ function renderJogo(){
       const emCasa = solo === "H";
       const rot = emCasa ? "em casa" : "fora de casa";
       const rxSel = computeRx(tidS, fx.ligaId, state.rxJanela, state.rxEscopo, emCasa);
-      const rxGer = computeRx(tidS, fx.ligaId, state.rxJanela, state.rxEscopo, null);
       if (rxSel && rxSel.jogos){
-        const linhaS = (key, label, a, b, dec=1, sufixo="") => {
-          if (a == null || b == null) return "";
-          const max = Math.max(a, b, 0.001);
-          return `<div class="rx-row">
-            <div class="rx-side"><span class="rx-val tnum">${fmt(a,dec)}${sufixo}</span><div class="rx-bar"><div class="rx-fill ${emCasa ? "home" : "away"}" style="width:${a/max*100}%"></div></div></div>
-            <div class="rx-label">${label}</div>
-            <div class="rx-side away"><div class="rx-bar"><div class="rx-fill" style="width:${b/max*100}%; background:#64756B"></div></div><span class="rx-val tnum" style="color:var(--txt3)">${fmt(b,dec)}${sufixo}</span></div>
+        const icoUp = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.55; vertical-align:-1px"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>`;
+        const linhaS = (key, label, a, dec=1, sufixo="") => {
+          if (a == null) return "";
+          return `<div class="rx-row rx-click" title="Gerar card pra postar" onclick="abrirCardSolo(${fi}, '${key}')">
+            <div class="rx-side"><span class="rx-val tnum" style="color:${emCasa ? "var(--acc)" : "#F0B14A"}">${fmt(a,dec)}${sufixo}</span></div>
+            <div class="rx-label">${label} ${icoUp}</div>
+            <div class="rx-side away"></div>
           </div>`;
         };
         const grupoS = (titulo, linhas) => linhas.trim() ? `<div class="rx-group"><div class="rx-group-t">${titulo}</div>${linhas}</div>` : "";
-        const corSel = emCasa ? "var(--acc)" : "#F0B14A";
         corpo = `
-          <div class="rx-sample">amostra: ${rxSel.jogos} jogo${rxSel.jogos===1?"":"s"} ${rot} · referência: ${rxGer.jogos} jogo${rxGer.jogos===1?"":"s"} no total${rxSel.inclui2025 ? " · inclui temporada 2025" : ""}</div>
-          <div style="display:flex; align-items:center; margin:12px 0 0">
-            <div style="flex:1; text-align:left; font-weight:800; font-size:11.5px; letter-spacing:.8px; color:${corSel}">${nomeS.toUpperCase()} · SÓ ${rot.toUpperCase()}</div>
-            <div style="flex:1; text-align:right; font-weight:800; font-size:11.5px; letter-spacing:.8px; color:var(--txt3)">${nomeS.toUpperCase()} · MÉDIA GERAL</div>
-          </div>
-          ${grupoS("Ataque", linhaS("gols", "Gols marcados", rxSel.gols, rxGer.gols) + linhaS("fin", "Finalizações", rxSel.fin, rxGer.fin) + linhaS("chutesGol", "Chutes a gol", rxSel.chutesGol, rxGer.chutesGol) + linhaS("cantos", "Escanteios", rxSel.cantos, rxGer.cantos))}
-          ${grupoS("Defesa", linhaS("golsSof", "Gols sofridos", rxSel.golsSof, rxGer.golsSof) + linhaS("finSof", "Finalizações sofridas", rxSel.finSof, rxGer.finSof) + linhaS("cantosSof", "Escanteios cedidos", rxSel.cantosSof, rxGer.cantosSof) + linhaS("defesas", "Defesas de goleiro", rxSel.defesas, rxGer.defesas))}
-          ${grupoS("Disciplina", linhaS("faltas", "Faltas cometidas", rxSel.faltas, rxGer.faltas) + linhaS("amarelos", "Cartões amarelos", rxSel.amarelos, rxGer.amarelos) + linhaS("vermelhos", "Cartões vermelhos", rxSel.vermelhos, rxGer.vermelhos, 2))}
-          ${grupoS("Controle", linhaS("posse", "Posse de bola", rxSel.posse, rxGer.posse, 0, "%") + linhaS("laterais", "Arremessos laterais", rxSel.laterais, rxGer.laterais) + linhaS("tiroMeta", "Tiros de meta", rxSel.tiroMeta, rxGer.tiroMeta))}`;
+          <div class="rx-sample">amostra: ${rxSel.jogos} jogo${rxSel.jogos===1?"":"s"} ${rot}${rxSel.inclui2025 ? " · inclui temporada 2025" : ""} · toque numa linha pra gerar o card</div>
+          ${grupoS("Ataque", linhaS("gols", "Gols marcados", rxSel.gols) + linhaS("fin", "Finalizações", rxSel.fin) + linhaS("chutesGol", "Chutes a gol", rxSel.chutesGol) + linhaS("cantos", "Escanteios", rxSel.cantos))}
+          ${grupoS("Defesa", linhaS("golsSof", "Gols sofridos", rxSel.golsSof) + linhaS("finSof", "Finalizações sofridas", rxSel.finSof) + linhaS("cantosSof", "Escanteios cedidos", rxSel.cantosSof) + linhaS("defesas", "Defesas de goleiro", rxSel.defesas))}
+          ${grupoS("Disciplina", linhaS("faltas", "Faltas cometidas", rxSel.faltas) + linhaS("amarelos", "Cartões amarelos", rxSel.amarelos) + linhaS("vermelhos", "Cartões vermelhos", rxSel.vermelhos, 2))}
+          ${grupoS("Controle", linhaS("posse", "Posse de bola", rxSel.posse, 0, "%") + linhaS("laterais", "Arremessos laterais", rxSel.laterais) + linhaS("tiroMeta", "Tiros de meta", rxSel.tiroMeta))}`;
       } else {
         corpo = `<div class="empty-box" style="margin-top:6px">O ${nomeS} ainda não tem jogos ${rot} na amostra atual — aumente a janela ou volte pra "Todos".</div>`;
       }
