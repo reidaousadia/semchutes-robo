@@ -75,6 +75,8 @@ LIGAS = {
     651:  ("Série B",            "liga",        "br",       1),
     657:  ("Série C",            "liga",        "br",       2),
     654:  ("Copa do Brasil",     "copa",        "br",       1),
+    1296: ("Carioca",            "liga",        "br",       2),   # estaduais: agenda jan-abr;
+    1313: ("Paulista",           "liga",        "br",       2),   # já engordam o confronto direto o ano todo
     1122: ("Libertadores",       "continental", "conmebol", 1),
     1116: ("Sul-Americana",      "continental", "conmebol", 1),
     8:    ("Premier League",     "liga",        "eu",       1),
