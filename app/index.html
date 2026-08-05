@@ -644,7 +644,8 @@
     font-family: var(--f-mono); font-size: 12.5px; font-weight: 700; color: var(--muted);
     position: relative; cursor: default; }
   /* tooltip: contra quem foi aquele jogo */
-  .bx[data-tip]:hover::after, .spark i[data-tip]:hover::after, .spark i.tipon[data-tip]::after {
+  .bx[data-tip]:hover::after, .spark i[data-tip]:hover::after, .spark i.tipon[data-tip]::after,
+  .mchip[data-tip]:hover::after, .mchip.tipon[data-tip]::after {
     content: attr(data-tip);
     position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
     background: var(--surface); color: var(--text); border: 1px solid var(--border);
@@ -652,7 +653,8 @@
     padding: 5px 9px; border-radius: 7px; box-shadow: 0 4px 14px rgba(0,0,0,.45);
     z-index: 50; pointer-events: none;
   }
-  .bx[data-tip]:hover::before, .spark i[data-tip]:hover::before, .spark i.tipon[data-tip]::before {
+  .bx[data-tip]:hover::before, .spark i[data-tip]:hover::before, .spark i.tipon[data-tip]::before,
+  .mchip[data-tip]:hover::before, .mchip.tipon[data-tip]::before {
     content: ""; position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%) rotate(45deg);
     width: 9px; height: 9px; background: var(--surface); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
     z-index: 51; pointer-events: none;
@@ -879,6 +881,8 @@
   .solo-row:hover { background: rgba(255,255,255,0.035); }
   .solo-row .val { font-weight: 800; min-width: 70px; font-size: 15.5px; }
   .solo-row .lbl { color: var(--txt2, #B9C4BD); font-size: 13.5px; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+  .mchip { display: inline-flex; align-items: center; margin: 0 7px; position: relative; cursor: default; vertical-align: -2px; }
+  .mchip .svgi { width: 15px; height: 15px; }
   .qt-seqline { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700;
     padding: 8px 10px; background: var(--surface); border-left: 3px solid var(--acc); border-radius: 6px; margin-bottom: 6px; }
   .qt-seqline .ico { font-size: 14px; }
@@ -1458,6 +1462,33 @@ function computeRx(tid, ligaId, janela, escopo, mando){
     posse: med(j=>j.own.posse), defesas: med(j=>j.own.defesas),
     laterais: med(j=>j.own.laterais ?? null), tiroMeta: med(j=>j.own.tiroMeta ?? null),
   };
+}
+
+/* ---------- Medidor de confronto (DvP): quanto cada time CEDE de cada estatística.
+   Percentil do adversário na base inteira de times → chama (cede muito) / floco (cede pouco). */
+let _dvp = null;
+function dvpBase(){
+  if (_dvp) return _dvp;
+  const chaves = { gols: j => j.golsSof, fin: j => j.adv.fin,
+                   chutesGol: j => j.adv.chutesGol, cantos: j => j.adv.cantos };
+  _dvp = {};
+  for (const k in chaves) _dvp[k] = [];
+  for (const tid in RAIOX_RAW){
+    const jogos = (RAIOX_RAW[tid].geral || []).slice(0, 10);
+    if (jogos.length < 5) continue;
+    for (const k in chaves){
+      const vals = jogos.map(chaves[k]).filter(v => v != null);
+      if (vals.length >= 5) _dvp[k].push(vals.reduce((a,b)=>a+b,0) / vals.length);
+    }
+  }
+  for (const k in _dvp) _dvp[k].sort((a,b)=>a-b);
+  return _dvp;
+}
+function dvpPercentil(stat, valor){
+  const arr = dvpBase()[stat];
+  if (!arr || arr.length < 20 || valor == null) return null;
+  let i = 0; while (i < arr.length && arr[i] <= valor) i++;
+  return Math.round(i / arr.length * 100);
 }
 
 /* Índice de jogadores reais pro Buscar/Ranking — 1 entrada por jogador,
@@ -3641,8 +3672,8 @@ function setRxMando(m){ state.rxMando = m; render(); }
    SEM disparar o card da linha; tocar no resto da linha gera o card normalmente.
    Listener em fase de captura pra interceptar antes do onclick da linha. */
 document.addEventListener("click", e => {
-  const bar = e.target.closest(".spark i");
-  document.querySelectorAll(".spark i.tipon").forEach(el => { if (el !== bar) el.classList.remove("tipon"); });
+  const bar = e.target.closest(".spark i, .mchip");
+  document.querySelectorAll(".spark i.tipon, .mchip.tipon").forEach(el => { if (el !== bar) el.classList.remove("tipon"); });
   if (bar){
     e.stopPropagation(); e.preventDefault();
     bar.classList.toggle("tipon");
@@ -3670,7 +3701,8 @@ function confrontosDoJogo(fx, escopo){
       : [fx.competicao];
     lista = lista.filter(c => alvos.includes(c.comp));
   }
-  return lista;
+  // teto de 10 confrontos na tela: percentual legível ("7 de 10") — a base guarda mais
+  return lista.slice(0, 10);
 }
 function computaH2H(fx, escopo){
   const lista = confrontosDoJogo(fx, escopo);
@@ -4214,19 +4246,33 @@ function renderJogo(){
     const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo, null);
     const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo, null);
     if (rxH && rxA){
-      const linha = (key, label, a, b, dec=1, sufixo="") => {
+      // medidor de confronto: chama = adversário cede muito desta estatística; floco = cede pouco
+      const NOME_DVP = { gols: "gols", fin: "finalizações", chutesGol: "chutes a gol", cantos: "escanteios" };
+      const badge = (stat, cedKey, advRx, advNome) => {
+        const v = advRx?.[cedKey];
+        const pct = dvpPercentil(stat, v);
+        if (pct == null) return "";
+        if (pct >= 70) return `<span class="mchip" data-tip="matchup quente: ${advNome} cede ${fmt(v)} ${NOME_DVP[stat]}/jogo — mais que ${pct}% dos times">${svgIco("chama")}</span>`;
+        if (pct <= 30) return `<span class="mchip" data-tip="matchup frio: ${advNome} cede só ${fmt(v)} ${NOME_DVP[stat]}/jogo — menos que ${100-pct}% dos times">${svgIco("floco")}</span>`;
+        return "";
+      };
+      const linha = (key, label, a, b, dec=1, sufixo="", bH="", bA="") => {
         if (a == null || b == null) return "";
         const max = Math.max(a, b, 0.001);
         return `<div class="rx-row rx-click" title="Gerar card pra postar" onclick="abrirCard(${fi}, '${key}', '${escapeHtml(label)}', ${a}, ${b}, ${dec}, '${sufixo}')">
-          <div class="rx-side"><span class="rx-val tnum">${fmt(a,dec)}${sufixo}</span><div class="rx-bar"><div class="rx-fill home" style="width:${a/max*100}%"></div></div></div>
+          <div class="rx-side"><span class="rx-val tnum">${fmt(a,dec)}${sufixo}</span>${bH}<div class="rx-bar"><div class="rx-fill home" style="width:${a/max*100}%"></div></div></div>
           <div class="rx-label">${label} <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.55; vertical-align:-1px"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg></div>
-          <div class="rx-side away"><div class="rx-bar"><div class="rx-fill away" style="width:${b/max*100}%"></div></div><span class="rx-val tnum">${fmt(b,dec)}${sufixo}</span></div>
+          <div class="rx-side away"><div class="rx-bar"><div class="rx-fill away" style="width:${b/max*100}%"></div></div>${bA}<span class="rx-val tnum">${fmt(b,dec)}${sufixo}</span></div>
         </div>`;
       };
       const grupo = (titulo, linhas) => linhas.trim() ? `<div class="rx-group"><div class="rx-group-t">${titulo}</div>${linhas}</div>` : "";
       corpo = `
         <div class="rx-sample">amostra: ${rxH.jogos} jogo${rxH.jogos===1?"":"s"} do ${fx.home} · ${rxA.jogos} jogo${rxA.jogos===1?"":"s"} do ${fx.away}${state.rxEscopo==="comp" ? (ehContinental ? " em copas continentais" : ` (só ${fx.competicao})`) : ""}${(rxH.jogos < state.rxJanela || rxA.jogos < state.rxJanela) ? " (todos os disponíveis)" : ""}${(rxH.inclui2025 || rxA.inclui2025) ? " · inclui temporada 2025" : ""}</div>
-        ${grupo("Ataque", linha("gols", "Gols marcados", rxH.gols, rxA.gols) + linha("fin", "Finalizações", rxH.fin, rxA.fin) + linha("chutesGol", "Chutes a gol", rxH.chutesGol, rxA.chutesGol) + linha("cantos", "Escanteios", rxH.cantos, rxA.cantos))}
+        ${grupo("Ataque",
+          linha("gols", "Gols marcados", rxH.gols, rxA.gols, 1, "", badge("gols","golsSof",rxA,fx.away), badge("gols","golsSof",rxH,fx.home)) +
+          linha("fin", "Finalizações", rxH.fin, rxA.fin, 1, "", badge("fin","finSof",rxA,fx.away), badge("fin","finSof",rxH,fx.home)) +
+          linha("chutesGol", "Chutes a gol", rxH.chutesGol, rxA.chutesGol, 1, "", badge("chutesGol","chutesGolSof",rxA,fx.away), badge("chutesGol","chutesGolSof",rxH,fx.home)) +
+          linha("cantos", "Escanteios", rxH.cantos, rxA.cantos, 1, "", badge("cantos","cantosSof",rxA,fx.away), badge("cantos","cantosSof",rxH,fx.home)))}
         ${grupo("Defesa", linha("golsSof", "Gols sofridos", rxH.golsSof, rxA.golsSof) + linha("finSof", "Finalizações sofridas", rxH.finSof, rxA.finSof) + linha("cantosSof", "Escanteios cedidos", rxH.cantosSof, rxA.cantosSof) + linha("defesas", "Defesas de goleiro", rxH.defesas, rxA.defesas))}
         ${grupo("Disciplina", linha("faltas", "Faltas cometidas", rxH.faltas, rxA.faltas) + linha("amarelos", "Cartões amarelos", rxH.amarelos, rxA.amarelos) + linha("vermelhos", "Cartões vermelhos", rxH.vermelhos, rxA.vermelhos, 2))}
         ${grupo("Controle", linha("posse", "Posse de bola", rxH.posse, rxA.posse, 0, "%") + linha("laterais", "Arremessos laterais", rxH.laterais, rxA.laterais) + linha("tiroMeta", "Tiros de meta", rxH.tiroMeta, rxA.tiroMeta))}`;
