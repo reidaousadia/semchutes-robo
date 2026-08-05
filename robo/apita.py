@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-"""Apitou — APITOU: vigia PLANTONISTA de escalações confirmadas.
+"""Apitou — APITOU: vigia PLANTONISTA de escalações confirmadas (fonte: Sportmonks).
+
+Migrado da API-Football em 05/08/2026 após teste A/B lado a lado:
+a Sportmonks publica a escalação ~T-72min antes do apito; a API-Football, ~T-29min.
+45 minutos de vantagem = alerta útil pro apostador agir antes da linha mexer.
 
 O agendador do GitHub Actions atrasa (cron */10 vira ~1x/hora na prática).
 Solução: cada acionamento vira um PLANTÃO — o script fica até ~55 min acordado,
 checando escalações a cada 5 min, e sai antes se não houver jogo por perto.
 Com acionamentos ~de hora em hora, a cobertura fica contínua.
 
-Quando a escalação sai: posta o XI no canal (@apitoualertas) e marca em
-robo/estado.json (commitado pelo workflow) pra nunca repetir alerta.
-O grupo de concorrência do workflow garante 1 plantão por vez (estado serializado).
+Quando a escalação sai (XI completo dos DOIS times): posta no canal
+(@apitoualertas) e marca em robo/estado.json (commitado pelo workflow)
+pra nunca repetir alerta. Concorrência: 1 plantão por vez.
 
-Env: API_FOOTBALL_KEY, TELEGRAM_TOKEN (ou .env na raiz, local).
+Env: SPORTMONKS_TOKEN, TELEGRAM_TOKEN (ou .env na raiz, local).
 """
 import json, os, sys, time, urllib.parse, urllib.request
 from datetime import datetime, timedelta, timezone
@@ -18,13 +22,15 @@ from datetime import datetime, timedelta, timezone
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BRT = timezone(timedelta(hours=-3))
 CANAL = "@apitoualertas"
-LIGAS = {71: "Brasileirão", 72: "Série B", 73: "Copa do Brasil",
-         11: "Sul-Americana", 13: "Libertadores"}
-JANELA_MIN = 90          # começa a vigiar a 90 min do apito inicial
+LIGAS = {648: "Brasileirão", 651: "Série B", 654: "Copa do Brasil",
+         1116: "Sul-Americana", 1122: "Libertadores"}
+JANELA_MIN = 100         # começa a vigiar a 100 min do apito (Sportmonks publica ~T-75)
 TOLERANCIA_MIN = 15      # segue tentando até 15 min depois do apito
 PLANTAO_SEG = 55 * 60    # duração máxima de um plantão
 CICLO_SEG = 5 * 60       # intervalo entre checagens dentro do plantão
-SEASON = 2026
+TIPO_TITULAR = 11
+UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Safari/537.36",
+      "Accept": "application/json"}
 
 def carrega_env(nome):
     v = os.environ.get(nome)
@@ -36,22 +42,22 @@ def carrega_env(nome):
                 return line.strip().split("=", 1)[1]
     return None
 
-KEY = carrega_env("API_FOOTBALL_KEY") or sys.exit("API_FOOTBALL_KEY ausente")
+TOKEN = carrega_env("SPORTMONKS_TOKEN") or sys.exit("SPORTMONKS_TOKEN ausente")
 TG = carrega_env("TELEGRAM_TOKEN") or sys.exit("TELEGRAM_TOKEN ausente")
 
-def api(path, **params):
-    qs = "&".join(f"{k}={v}" for k, v in params.items())
-    req = urllib.request.Request(f"https://v3.football.api-sports.io{path}?{qs}",
-                                 headers={"x-apisports-key": KEY})
+def sm(path, **params):
+    params["api_token"] = TOKEN
+    qs = urllib.parse.urlencode(params, safe=";:,.")
+    req = urllib.request.Request(f"https://api.sportmonks.com/v3/football{path}?{qs}", headers=UA)
     for _ in range(2):
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
                 data = json.load(r)
-            time.sleep(0.3)
-            return data.get("response", [])
+            time.sleep(0.4)
+            return data
         except Exception as e:
             print("retry", path, e, flush=True); time.sleep(4)
-    return []
+    return {}
 
 def telegram(texto):
     data = urllib.parse.urlencode({"chat_id": CANAL, "text": texto,
@@ -73,40 +79,60 @@ def salva_estado():
     estado["alertados"] = estado["alertados"][-200:]
     json.dump(estado, open(ESTADO_PATH, "w"))
 
-# ---------------- jogos do dia (1 vez por plantão; 5 chamadas) ----------------
-hoje_brt = datetime.now(BRT).date().isoformat()
-candidatos = []
-for lid in LIGAS:
-    for f in api("/fixtures", league=lid, season=SEASON, date=hoje_brt, timezone="America/Sao_Paulo"):
-        if f["fixture"]["status"]["short"] != "NS": continue
-        candidatos.append({"f": f, "fid": f["fixture"]["id"],
-                           "kickoff": datetime.fromisoformat(f["fixture"]["date"])})
+# ---------------- jogos do dia em BRT (1 varredura por plantão) ----------------
+hoje_brt = datetime.now(BRT).date()
+d1, d2 = hoje_brt.isoformat(), (hoje_brt + timedelta(days=1)).isoformat()
+ids_ligas = ",".join(str(l) for l in LIGAS)
+candidatos, page = [], 1
+while True:
+    r = sm(f"/fixtures/between/{d1}/{d2}", include="participants;state",
+           filters=f"fixtureLeagues:{ids_ligas}", per_page=50, page=page)
+    for f in r.get("data", []):
+        if (f.get("state") or {}).get("short_name") != "NS": continue
+        ko = datetime.fromisoformat(f["starting_at"]).replace(tzinfo=timezone.utc)
+        if ko.astimezone(BRT).date() != hoje_brt: continue   # datas da API são UTC
+        parts = f.get("participants", [])
+        casa = next((p["name"] for p in parts if (p.get("meta") or {}).get("location") == "home"), "?")
+        fora = next((p["name"] for p in parts if (p.get("meta") or {}).get("location") == "away"), "?")
+        candidatos.append({"fid": f["id"], "kickoff": ko, "casa": casa, "fora": fora,
+                           "liga": LIGAS.get(f.get("league_id"), "")})
+    if not (r.get("pagination") or {}).get("has_more"): break
+    page += 1
 print(f"{len(candidatos)} jogo(s) hoje ({hoje_brt})", flush=True)
 if not candidatos:
     salva_estado(); print("sem jogos — plantão encerrado"); sys.exit(0)
 
 def apita(c):
-    """Consulta a escalação; se saiu, posta no canal. True se alertou."""
-    lineups = api("/fixtures/lineups", fixture=c["fid"])
-    if not lineups: return False
-    f = c["f"]
-    h, a = f["teams"]["home"]["name"], f["teams"]["away"]["name"]
+    """Consulta a escalação na Sportmonks; se os DOIS XIs saíram, posta. True se alertou."""
+    det = sm(f"/fixtures/{c['fid']}", include="lineups;formations").get("data") or {}
+    lus = [l for l in det.get("lineups", []) if l.get("type_id") == TIPO_TITULAR]
+    if len(lus) < 22: return False   # espera a escalação COMPLETA dos dois times
+    por_time = {}
+    for l in lus:
+        por_time.setdefault(l.get("team_id"), []).append(l)
+    formacoes = {f.get("participant_id"): f.get("formation")
+                 for f in det.get("formations", [])}
+    nomes_time = {p["id"]: p["name"] for p in det.get("participants", [])} or None
+
     hora = c["kickoff"].astimezone(BRT).strftime("%H:%M")
-    liga = LIGAS.get(f["league"]["id"], f["league"]["name"])
     partes = [f"🚨 *Apitou! Escalação confirmada*",
-              f"⚽ *{h} x {a}* · {liga} · {hora}", ""]
-    for b in lineups:
-        xi = ", ".join(p["player"]["name"] for p in (b.get("startXI") or []))
-        if not xi: continue
-        form = f" ({b['formation']})" if b.get("formation") else ""
-        partes.append(f"*{b['team']['name']}*{form}:")
-        partes.append(xi)
+              f"⚽ *{c['casa']} x {c['fora']}* · {c['liga']} · {hora}", ""]
+    # mandante primeiro; ordena o XI pela posição no campo (formation_field "linha:coluna")
+    ordem_grid = lambda l: tuple(int(x) for x in (l.get("formation_field") or "9:9").split(":"))
+    times_ordenados = sorted(por_time.items(),
+                             key=lambda kv: 0 if (nomes_time or {}).get(kv[0]) == c["casa"] else 1)
+    for tid, xi in times_ordenados:
+        nome = (nomes_time or {}).get(tid) or ""
+        form = formacoes.get(tid)
+        xi = sorted(xi, key=ordem_grid)
+        partes.append(f"*{nome}*{f' ({form})' if form else ''}:")
+        partes.append(", ".join(l.get("player_name") or "?" for l in xi))
         partes.append("")
     partes.append("📊 raio-x completo: apitou.com.br")
     if telegram("\n".join(partes)):
         estado["alertados"].append(c["fid"])
         salva_estado()
-        print(f"APITOU: {h} x {a}", flush=True)
+        print(f"APITOU: {c['casa']} x {c['fora']}", flush=True)
         return True
     return False
 
@@ -127,7 +153,6 @@ while True:
           f"{len(a_caminho)} a caminho · restam {int(restante/60)} min de plantão", flush=True)
     if restante <= CICLO_SEG:
         print("fim do plantão (tempo)"); break
-    # ninguém na janela e ninguém ENTRA na janela até o fim do plantão → dorme cedo
     entra_em_breve = any(falta(c) - JANELA_MIN*60 < restante for c in a_caminho)
     if not na_janela and not entra_em_breve:
         print("nada pra vigiar no restante do plantão — encerrando cedo"); break

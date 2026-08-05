@@ -19,7 +19,7 @@ jobs:
           python-version: '3.12'
       - name: Vigia escalações
         env:
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          SPORTMONKS_TOKEN: ${{ secrets.SPORTMONKS_TOKEN }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: python3 robo/apita.py
       - name: Salva estado (quem já foi alertado)
