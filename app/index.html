@@ -1363,7 +1363,7 @@ const RAIOX = SEM.raiox || {};
 /* v2: estatísticas jogo a jogo (últimos 15) — médias calculadas no app
    conforme o filtro do usuário (janela de jogos + competição/geral). */
 const RAIOX_RAW = SEM.raioxRaw || {};
-function getJogosRx(tid, ligaId, janela, escopo){
+function getJogosRx(tid, ligaId, janela, escopo, mando){
   const reg = RAIOX_RAW[String(tid)];
   if (!reg) return [];
   // v3: histórico geral e por competição são listas separadas — "últimos 10 na
@@ -1380,6 +1380,8 @@ function getJogosRx(tid, ligaId, janela, escopo){
   }
   // ordena explicitamente do mais recente pro mais antigo (nunca confiar na ordem de chegada)
   if (jogos.length && jogos[0].ts) jogos.sort((a,b) => b.ts.localeCompare(a.ts));
+  // filtro de mando (casa=true / fora=false) — ignorado se o dado não tem a flag
+  if (mando != null && jogos.some(j => j.casa != null)) jogos = jogos.filter(j => j.casa === mando);
   return jogos.slice(0, janela);
 }
 /* seletor do valor por jogo de cada estatística (usado no extrato do card) */
@@ -1393,8 +1395,8 @@ const STAT_SEL = {
   posse: j=>j.own.posse, defesas: j=>j.own.defesas,
   laterais: j=>j.own.laterais ?? null, tiroMeta: j=>j.own.tiroMeta ?? null,
 };
-function computeRx(tid, ligaId, janela, escopo){
-  const jogos = getJogosRx(tid, ligaId, janela, escopo);
+function computeRx(tid, ligaId, janela, escopo, mando){
+  const jogos = getJogosRx(tid, ligaId, janela, escopo, mando);
   if (!jogos.length) return null;
   const inclui2025 = jogos.some(j => j.ts && j.ts < "2026");
   const med = sel => {
@@ -1495,7 +1497,7 @@ function go(view, playerId, qiFixture, qiPlayer, jogoIdx){
   if (qiPlayer != null) state.qiPlayer = qiPlayer;
   if (jogoIdx != null) { state.jogoAberto = jogoIdx; state.elencoAberto = {};
     // ao abrir um jogo: aba Números · Últimos 10 · só a competição do jogo
-    state.jogoTab = "stats"; state.rxEscopo = "comp"; state.rxJanela = 10; state.h2hSub = "ult"; }
+    state.jogoTab = "stats"; state.rxEscopo = "comp"; state.rxJanela = 10; state.h2hSub = "ult"; state.rxMando = "todos"; }
   const navMap = {
     "nav-oportunidades": ["oportunidades","jogo","jogos","arbitro"],
     "nav-search": ["search","jogador"],
@@ -2060,16 +2062,19 @@ function enviarLead(ev){
 /* ---------- GERADOR DE CARD (branding/divulgação — Instagram) ---------- */
 function abrirCard(fi, key, label, a, b, dec, sufixo){
   const fx = FIXTURES[fi];
-  const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo);
-  const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo);
+  const _mH = state.rxMando === "mando" ? true : null, _mA = state.rxMando === "mando" ? false : null;
+  const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo, _mH);
+  const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo, _mA);
   const ehContinental = ehContinentalLiga(fx.ligaId);
   let contexto = `média dos últimos ${Math.max(rxH?.jogos||0, rxA?.jogos||0)} jogos`;
   if (state.rxEscopo === "comp") contexto += ehContinental ? " · copas continentais" : ` · ${fx.competicao}`;
   if (rxH?.inclui2025 || rxA?.inclui2025) contexto += " · inclui temporada 2025";
+  if (state.rxMando === "mando") contexto += " · mandante em casa × visitante fora";
   // extrato jogo a jogo da estatística clicada (pro card detalhado)
   const sel = STAT_SEL[key];
+  const mandoDe = tid => (state.rxMando === "mando" ? tid === fx.homeId : null);
   const extrato = tid => sel
-    ? getJogosRx(tid, fx.ligaId, state.rxJanela, state.rxEscopo)
+    ? getJogosRx(tid, fx.ligaId, state.rxJanela, state.rxEscopo, mandoDe(tid))
         .map(j => ({ v: sel(j), adv: j.advNome || j.ts?.slice(5).split("-").reverse().join("/") || "?" }))
         .filter(e => e.v != null)
     : [];
@@ -3212,6 +3217,7 @@ function renderJogos(){
 }
 
 function setRxJanela(n){ state.rxJanela = n; render(); }
+function setRxMando(m){ state.rxMando = m; render(); }
 function setJogoTab(t){
   // cada aba abre no escopo natural: Números = só a competição do jogo;
   // Confronto/Quentes = todos os jogos (retrato completo)
@@ -3681,7 +3687,13 @@ function renderJogo(){
     <div class="filters">${chipJ(5)}${chipJ(10)}${chipJ(15)}${ehLiga ? chipJ(30) : ""}</div>`;
   const grupoEscopo = `<div class="qlabel">Quais jogos?</div>
     <div class="filters">${chipE("comp", labelComp)}${chipE("geral", "Todos os jogos")}</div>`;
-  const filtrosRow = tab === "esc" ? "" : `<div class="jogo-filtros">${tab === "stats" ? grupoJanela : ""}${grupoEscopo}</div>`;
+  // mando de campo (só na aba Números; só quando o dado tem a flag)
+  const temMando = (RAIOX_RAW[String(fx.homeId)]?.geral || []).some(j => j.casa != null);
+  const mandoSel = state.rxMando || "todos";
+  const chipM = (m, txt) => `<button class="chip ${mandoSel===m?'on':''}" onclick="setRxMando('${m}')">${txt}</button>`;
+  const grupoMando = temMando ? `<div class="qlabel">Mando de campo?</div>
+    <div class="filters">${chipM("todos", "Todos")}${chipM("mando", `Só no mando do jogo`)}</div>` : "";
+  const filtrosRow = tab === "esc" ? "" : `<div class="jogo-filtros">${tab === "stats" ? grupoJanela : ""}${grupoEscopo}${tab === "stats" ? grupoMando : ""}</div>`;
 
   const teamsHead = `
     <div class="rx-teams-head">
@@ -3699,8 +3711,10 @@ function renderJogo(){
   } else if (tab === "esc"){
     corpo = escalacoesCorpo(fx, fi);
   } else {
-    const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo);
-    const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo);
+    const mandoH = mandoSel === "mando" ? true : null;
+    const mandoA = mandoSel === "mando" ? false : null;
+    const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo, mandoH);
+    const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo, mandoA);
     if (rxH && rxA){
       const linha = (key, label, a, b, dec=1, sufixo="") => {
         if (a == null || b == null) return "";
@@ -3713,7 +3727,7 @@ function renderJogo(){
       };
       const grupo = (titulo, linhas) => linhas.trim() ? `<div class="rx-group"><div class="rx-group-t">${titulo}</div>${linhas}</div>` : "";
       corpo = `
-        <div class="rx-sample">amostra: ${rxH.jogos} jogo${rxH.jogos===1?"":"s"} do ${fx.home} · ${rxA.jogos} jogo${rxA.jogos===1?"":"s"} do ${fx.away}${state.rxEscopo==="comp" ? (ehContinental ? " em copas continentais" : ` (só ${fx.competicao})`) : ""}${(rxH.jogos < state.rxJanela || rxA.jogos < state.rxJanela) ? " (todos os disponíveis)" : ""}${(rxH.inclui2025 || rxA.inclui2025) ? " · inclui temporada 2025" : ""}</div>
+        <div class="rx-sample">amostra: ${rxH.jogos} jogo${rxH.jogos===1?"":"s"} do ${fx.home} · ${rxA.jogos} jogo${rxA.jogos===1?"":"s"} do ${fx.away}${state.rxEscopo==="comp" ? (ehContinental ? " em copas continentais" : ` (só ${fx.competicao})`) : ""}${(rxH.jogos < state.rxJanela || rxA.jogos < state.rxJanela) ? " (todos os disponíveis)" : ""}${(rxH.inclui2025 || rxA.inclui2025) ? " · inclui temporada 2025" : ""}${mandoSel === "mando" ? ` · ${fx.home} só EM CASA × ${fx.away} só FORA` : ""}</div>
         ${grupo("Ataque", linha("gols", "Gols marcados", rxH.gols, rxA.gols) + linha("fin", "Finalizações", rxH.fin, rxA.fin) + linha("chutesGol", "Chutes a gol", rxH.chutesGol, rxA.chutesGol) + linha("cantos", "Escanteios", rxH.cantos, rxA.cantos))}
         ${grupo("Defesa", linha("golsSof", "Gols sofridos", rxH.golsSof, rxA.golsSof) + linha("finSof", "Finalizações sofridas", rxH.finSof, rxA.finSof) + linha("cantosSof", "Escanteios cedidos", rxH.cantosSof, rxA.cantosSof) + linha("defesas", "Defesas de goleiro", rxH.defesas, rxA.defesas))}
         ${grupo("Disciplina", linha("faltas", "Faltas cometidas", rxH.faltas, rxA.faltas) + linha("amarelos", "Cartões amarelos", rxH.amarelos, rxA.amarelos) + linha("vermelhos", "Cartões vermelhos", rxH.vermelhos, rxA.vermelhos, 2))}

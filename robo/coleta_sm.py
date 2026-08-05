@@ -220,10 +220,17 @@ def adversario(det, tid):
         if p["id"] != tid: return p["name"]
     return "?"
 
+def foi_casa(det, tid):
+    for p in det.get("participants", []):
+        if (p.get("meta") or {}).get("location") == "home":
+            return p["id"] == tid
+    return None
+
 def registro_jogo(det, tid, ts, lid):
     own, adv = stats_do_time(det, tid)
     g, gs = placar(det, tid)
     return {"liga": lid, "ts": ts, "advNome": adversario(det, tid),
+            "casa": foi_casa(det, tid),
             "own": own, "adv": adv, "gols": g, "golsSof": gs}
 
 raiox_raw, jog_hist, acum_elenco, temporada = {}, {}, {}, {}
@@ -249,7 +256,7 @@ for tid, tname in teams.items():
             nome = nome_por_pid.get(pid) or lu.get("player_name")
             if pid in squads.get(tid, {}) and len(equipe.get(nome, [])) < 10:
                 equipe.setdefault(nome, []).append({
-                    "t": jt["ts"], "l": jt["liga"], "a": adversario(det, tid),
+                    "t": jt["ts"], "l": jt["liga"], "a": adversario(det, tid), "c": foi_casa(det, tid),
                     "m": vals["m"], "f": vals["f"], "o": vals["o"], "g": vals["g"],
                     "fc": vals["fc"], "fs": vals["fs"], "am": vals["am"], "vm": vals["vm"]})
             a = acum.setdefault(pid, {"apps": 0, "f": 0, "o": 0, "fc": 0, "fs": 0, "df": 0, "min": 0, "g": 0, "ds": 0, "ps": 0})
