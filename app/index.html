@@ -3909,7 +3909,18 @@ function renderJogo(){
     </select></div>`;
   const filtrosRow = tab === "esc" ? "" : `<div class="jogo-filtros">${tab === "stats" ? grupoJanela : ""}${grupoEscopo}${tab === "stats" ? grupoMando : ""}${tab === "stats" ? grupoStat : ""}</div>`;
 
-  const teamsHead = `
+  // no modo clube único (mando), o cabeçalho mostra SÓ o clube filtrado — os dois
+  // escudos juntos faziam a coluna esquerda parecer do mandante
+  const soloHead = tab === "stats" && (state.rxMando === "casaH" || state.rxMando === "foraA");
+  const teamsHead = soloHead ? (() => {
+    const ehCasa = state.rxMando === "casaH";
+    const nomeS = ehCasa ? fx.home : fx.away;
+    return `
+    <div class="rx-teams-head" style="justify-content:center; gap:12px">
+      <div class="rx-team">${teamCrest(nomeS)}<span class="tn">${nomeS}</span><span class="rx-dot ${ehCasa ? "home" : "away"}"></span></div>
+      <span class="rx-vs">só jogos ${ehCasa ? "em casa" : "fora de casa"}</span>
+    </div>`;
+  })() : `
     <div class="rx-teams-head">
       <div class="rx-team">${teamCrest(fx.home)}<span class="tn">${fx.home}</span><span class="rx-dot home"></span></div>
       <span class="rx-vs">${tab === "h2h" ? "confronto direto" : tab === "quentes" ? "forma recente" : tab === "esc" ? "escalações" : "média por jogo"}</span>
@@ -3946,9 +3957,13 @@ function renderJogo(){
           </div>`;
         };
         const grupoS = (titulo, linhas) => linhas.trim() ? `<div class="rx-group"><div class="rx-group-t">${titulo}</div>${linhas}</div>` : "";
+        const corSel = emCasa ? "var(--acc)" : "#F0B14A";
         corpo = `
-          <div class="rx-sample" style="margin-bottom:2px"><b style="color:var(--txt)">${nomeS} ${rot}</b> (colorido) × média geral do ${nomeS} (cinza)</div>
           <div class="rx-sample">amostra: ${rxSel.jogos} jogo${rxSel.jogos===1?"":"s"} ${rot} · referência: ${rxGer.jogos} jogo${rxGer.jogos===1?"":"s"} no total${rxSel.inclui2025 ? " · inclui temporada 2025" : ""}</div>
+          <div style="display:flex; align-items:center; margin:12px 0 0">
+            <div style="flex:1; text-align:left; font-weight:800; font-size:11.5px; letter-spacing:.8px; color:${corSel}">${nomeS.toUpperCase()} · SÓ ${rot.toUpperCase()}</div>
+            <div style="flex:1; text-align:right; font-weight:800; font-size:11.5px; letter-spacing:.8px; color:var(--txt3)">${nomeS.toUpperCase()} · MÉDIA GERAL</div>
+          </div>
           ${grupoS("Ataque", linhaS("gols", "Gols marcados", rxSel.gols, rxGer.gols) + linhaS("fin", "Finalizações", rxSel.fin, rxGer.fin) + linhaS("chutesGol", "Chutes a gol", rxSel.chutesGol, rxGer.chutesGol) + linhaS("cantos", "Escanteios", rxSel.cantos, rxGer.cantos))}
           ${grupoS("Defesa", linhaS("golsSof", "Gols sofridos", rxSel.golsSof, rxGer.golsSof) + linhaS("finSof", "Finalizações sofridas", rxSel.finSof, rxGer.finSof) + linhaS("cantosSof", "Escanteios cedidos", rxSel.cantosSof, rxGer.cantosSof) + linhaS("defesas", "Defesas de goleiro", rxSel.defesas, rxGer.defesas))}
           ${grupoS("Disciplina", linhaS("faltas", "Faltas cometidas", rxSel.faltas, rxGer.faltas) + linhaS("amarelos", "Cartões amarelos", rxSel.amarelos, rxGer.amarelos) + linhaS("vermelhos", "Cartões vermelhos", rxSel.vermelhos, rxGer.vermelhos, 2))}
