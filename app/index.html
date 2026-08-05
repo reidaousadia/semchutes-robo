@@ -742,6 +742,40 @@
   .jogo-tab:hover { color: var(--text-dim); }
   .jogo-tab.on { color: var(--acc); border-bottom-color: var(--acc); }
   @media (max-width: 520px){ .jogo-tab { font-size: 12.5px; padding: 10px 2px; } }
+  /* ---------- sidebar de ligas (desktop) ---------- */
+  .home-grid { display: flex; gap: 24px; align-items: flex-start; }
+  .home-main { flex: 1; min-width: 0; }
+  .liga-side { display: none; }
+  @media (min-width: 1150px){
+    .liga-side { display: block; width: 236px; flex: none; position: sticky; top: 78px;
+      max-height: calc(100vh - 100px); overflow-y: auto; padding: 4px 6px 20px 0;
+      scrollbar-width: thin; }
+    .filtros-mobile { display: none !important; }  /* no desktop, o sidebar assume */
+  }
+  .ls-h { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); margin: 18px 0 6px 8px; }
+  .ls-h:first-child { margin-top: 4px; }
+  .ls-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    appearance: none; background: transparent; border: 0; cursor: pointer;
+    padding: 8px 8px; border-radius: 8px; color: var(--text-dim);
+    font-family: var(--f-ui); font-size: 13px; font-weight: 600; }
+  .ls-item:hover { background: var(--surface); color: var(--text); }
+  .ls-item.on { background: var(--acc-soft); color: var(--acc); }
+  .ls-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ls-item .n { margin-left: auto; font-family: var(--f-mono); font-size: 10.5px; color: var(--muted); flex: none; }
+  .ls-pin { flex: none; color: var(--muted); font-size: 13px; padding: 0 2px; opacity: 0; transition: opacity .12s; }
+  .ls-item:hover .ls-pin { opacity: 1; }
+  .ls-pin.on { color: var(--amber); opacity: 1; }
+
+  /* seletor de competições na home (fileira rolável) */
+  .comp-scroll { display: flex; gap: 6px; margin-top: 8px; overflow-x: auto; padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .comp-scroll::-webkit-scrollbar { display: none; }
+  .comp-scroll .chip { flex: none; white-space: nowrap; }
+  .chip-n { display: inline-block; margin-left: 5px; padding: 0 6px; border-radius: 999px;
+    background: rgba(0,0,0,0.25); font-family: var(--f-mono); font-size: 10.5px; font-weight: 800; }
+  .chip:not(.on) .chip-n { background: var(--surface-2); color: var(--muted); }
+
   /* faixa do árbitro na tela do jogo */
   .arb-bar { margin-top: 10px; padding: 9px 13px; font-size: 13px; color: var(--text-dim);
     background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 9px;
@@ -1278,9 +1312,11 @@ function ligasIrmas(lid){
   return [11, 13];
 }
 function regiaoDe(lid){
+  // filtro por COMPETIÇÃO (não por nacionalidade dos times):
+  // Brasil = só competições brasileiras; Liberta/Sula ficam em Américas
   const g = ligaInfo(lid).grupo;
   if (g === "eu" || g === "uefa") return "eu";
-  if (g === "am" || g === "concacaf") return "am";
+  if (g === "am" || g === "concacaf" || g === "conmebol") return "am";
   return "br";
 }
 function getHistJogador(tid, nome, janela, escopo, ligaId){
@@ -1780,7 +1816,24 @@ function teamCrest(name){
   return `<div class="crest" style="background:hsl(${h} 30% 26% / .5); color:hsl(${h} 68% 70%)">${escudoOuIniciais(name)}</div>`;
 }
 function setDiaFiltro(d){ state.diaFiltro = d; render(); }
-function setRegiao(r){ state.regiaoFiltro = r; render(); }
+function setRegiao(r){ state.regiaoFiltro = r; state.compFiltro = null; render(); }
+function setCompFiltro(lid){ state.compFiltro = lid; render(); }
+/* ligas fixadas pelo usuário (persistem no navegador) */
+function getFavLigas(){
+  try { return JSON.parse(localStorage.getItem("apitou-ligas-fav") || "[]"); } catch(e){ return []; }
+}
+function toggleFavLiga(ev, lid){
+  ev.stopPropagation();
+  let favs = getFavLigas();
+  favs = favs.includes(lid) ? favs.filter(x => x !== lid) : [...favs, lid];
+  try { localStorage.setItem("apitou-ligas-fav", JSON.stringify(favs)); } catch(e){}
+  render();
+}
+function setCompSide(lid){
+  state.regiaoFiltro = "todos";
+  state.compFiltro = state.compFiltro === lid ? null : lid;
+  render();
+}
 
 function renderOportunidades(){
   const filtro = state.diaFiltro || "semana";
@@ -1791,10 +1844,26 @@ function renderOportunidades(){
   // aplica o filtro por dia (nunca mostra jogos que já passaram)
   let visiveis = FIXTURES.map((fx, fi) => ({ fx, fi }))
     .filter(({ fx }) => diasDe(diaBRT(fx.kickoff)) >= 0);
+  // mapa completo de competições (pro sidebar — antes do filtro de região)
+  const porCompAll = new Map();
+  visiveis.forEach(({ fx }) => {
+    const c = porCompAll.get(fx.ligaId) || { nome: fx.competicao, n: 0, regiao: regiaoDe(fx.ligaId) };
+    c.n++; porCompAll.set(fx.ligaId, c);
+  });
   // filtro por região (v2b — só aparece quando a agenda é multirregião)
   const regioes = new Set(visiveis.map(({ fx }) => regiaoDe(fx.ligaId)));
   const regiao = state.regiaoFiltro || "todos";
   if (regiao !== "todos") visiveis = visiveis.filter(({ fx }) => regiaoDe(fx.ligaId) === regiao);
+  // seletor de competição (dentro da região ativa)
+  const porComp = new Map();
+  visiveis.forEach(({ fx }) => {
+    const c = porComp.get(fx.ligaId) || { nome: fx.competicao, n: 0 };
+    c.n++; porComp.set(fx.ligaId, c);
+  });
+  const comps = [...porComp.entries()].sort((a, b) => b[1].n - a[1].n);
+  if (state.compFiltro != null && porComp.has(state.compFiltro))
+    visiveis = visiveis.filter(({ fx }) => fx.ligaId === state.compFiltro);
+  else state.compFiltro = null;
   const alvo = { hoje: 0, amanha: 1, depois: 2 }[filtro];
   if (alvo != null) visiveis = visiveis.filter(({ fx }) => diasDe(diaBRT(fx.kickoff)) === alvo);
 
@@ -1832,9 +1901,37 @@ function renderOportunidades(){
     </div>`;
   }).join("") : `<div class="empty-box" style="margin-top:24px">Nenhum jogo ${rotulosFiltro[filtro] || "nesse dia"}. Veja a semana toda.</div>`;
 
+  // ----- sidebar de competições (desktop): fixadas primeiro, depois por região -----
+  const favs = getFavLigas();
+  const bandeira = { br: "🇧🇷", eu: "🇪🇺", am: "🌎" };
+  const lsItem = (lid, c) => `
+    <button class="ls-item ${state.compFiltro===lid?'on':''}" onclick="setCompSide(${lid})">
+      <span>${bandeira[c.regiao] || "⚽"}</span><span class="ls-nm">${c.nome}</span>
+      <span class="n tnum">${c.n}</span>
+      <span class="ls-pin ${favs.includes(lid)?'on':''}" onclick="toggleFavLiga(event, ${lid})" title="${favs.includes(lid)?'Desafixar':'Fixar no topo'}">${favs.includes(lid)?'★':'☆'}</span>
+    </button>`;
+  const compsAll = [...porCompAll.entries()];
+  const fixadas = compsAll.filter(([lid]) => favs.includes(lid));
+  let sideHTML = "";
+  if (compsAll.length > 1){
+    const blocos = [];
+    if (fixadas.length)
+      blocos.push(`<div class="ls-h">📌 Ligas fixadas</div>` + fixadas.map(([lid, c]) => lsItem(lid, c)).join(""));
+    for (const [reg, titulo] of [["br","🇧🇷 Brasil"],["am","🌎 Américas"],["eu","🇪🇺 Europa"]]){
+      const doReg = compsAll.filter(([lid, c]) => c.regiao === reg && !favs.includes(lid))
+                            .sort((a, b) => b[1].n - a[1].n);
+      if (doReg.length)
+        blocos.push(`<div class="ls-h">${titulo}</div>` + doReg.map(([lid, c]) => lsItem(lid, c)).join(""));
+    }
+    sideHTML = `<aside class="liga-side">${blocos.join("")}</aside>`;
+  }
+
   const chipD = (k, txt) => `<button class="chip ${filtro===k?'on':''}" onclick="setDiaFiltro('${k}')">${txt}</button>`;
 
   el.innerHTML = `
+  <div class="home-grid">
+    ${sideHTML}
+    <div class="home-main">
     <div class="hero">
       <div class="hero-row">
         <div>
@@ -1850,9 +1947,14 @@ function renderOportunidades(){
     <div class="filters" style="margin-top:20px">
       ${chipD("hoje", "Hoje")}${chipD("amanha", "Amanhã")}${chipD("depois", "Depois de amanhã")}${chipD("semana", "Semana toda")}
     </div>
-    ${regioes.size > 1 ? `<div class="filters" style="margin-top:8px">
+    ${regioes.size > 1 ? `<div class="filters filtros-mobile" style="margin-top:8px">
       ${[["todos","🌍 Tudo"],["br","🇧🇷 Brasil"],["eu","🇪🇺 Europa"],["am","🌎 Américas"]].map(([k, txt]) =>
         `<button class="chip ${regiao===k?'on':''}" onclick="setRegiao('${k}')">${txt}</button>`).join("")}
+    </div>` : ""}
+    ${comps.length > 1 ? `<div class="comp-scroll filtros-mobile">
+      <button class="chip ${state.compFiltro==null?'on':''}" onclick="setCompFiltro(null)">Todas as competições</button>
+      ${comps.map(([lid, c]) =>
+        `<button class="chip ${state.compFiltro===lid?'on':''}" onclick="setCompFiltro(${lid})">${c.nome} <span class="chip-n">${c.n}</span></button>`).join("")}
     </div>` : ""}
     <div class="lead-banner">
       <div class="lb-txt">
@@ -1863,6 +1965,8 @@ function renderOportunidades(){
     </div>
     <div style="margin-top:18px">${conteudo}</div>
     ${sourceNoteQI()}
+    </div>
+  </div>
   `;
 }
 const rotulosFiltro = { hoje: "hoje", amanha: "amanhã", depois: "depois de amanhã" };
