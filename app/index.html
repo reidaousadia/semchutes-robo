@@ -2096,17 +2096,19 @@ function enviarLead(ev){
 /* ---------- GERADOR DE CARD (branding/divulgação — Instagram) ---------- */
 function abrirCard(fi, key, label, a, b, dec, sufixo){
   const fx = FIXTURES[fi];
-  const _mH = state.rxMando === "mando" ? true : null, _mA = state.rxMando === "mando" ? false : null;
+  const _mv = state.rxMando === "casa" ? true : state.rxMando === "fora" ? false : null;
+  const _mH = _mv, _mA = _mv;
   const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo, _mH);
   const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo, _mA);
   const ehContinental = ehContinentalLiga(fx.ligaId);
   let contexto = `média dos últimos ${Math.max(rxH?.jogos||0, rxA?.jogos||0)} jogos`;
   if (state.rxEscopo === "comp") contexto += ehContinental ? " · copas continentais" : ` · ${fx.competicao}`;
   if (rxH?.inclui2025 || rxA?.inclui2025) contexto += " · inclui temporada 2025";
-  if (state.rxMando === "mando") contexto += " · mandante em casa × visitante fora";
+  if (state.rxMando === "casa") contexto += " · só jogos em casa";
+  else if (state.rxMando === "fora") contexto += " · só jogos fora de casa";
   // extrato jogo a jogo da estatística clicada (pro card detalhado)
   const sel = STAT_SEL[key];
-  const mandoDe = tid => (state.rxMando === "mando" ? tid === fx.homeId : null);
+  const mandoDe = tid => (state.rxMando === "casa" ? true : state.rxMando === "fora" ? false : null);
   const extrato = tid => sel
     ? getJogosRx(tid, fx.ligaId, state.rxJanela, state.rxEscopo, mandoDe(tid))
         .map(j => ({ v: sel(j), adv: j.advNome || j.ts?.slice(5).split("-").reverse().join("/") || "?" }))
@@ -3875,7 +3877,7 @@ function renderJogo(){
   const mandoSel = state.rxMando || "todos";
   const chipM = (m, txt) => `<button class="chip ${mandoSel===m?'on':''}" onclick="setRxMando('${m}')">${txt}</button>`;
   const grupoMando = temMando ? `<div class="qlabel">Mando de campo?</div>
-    <div class="filters">${chipM("todos", "Todos")}${chipM("mando", `Só no mando do jogo`)}</div>` : "";
+    <div class="filters">${chipM("todos", "Todos")}${chipM("casa", "Em casa")}${chipM("fora", "Fora de casa")}</div>` : "";
   const filtrosRow = tab === "esc" ? "" : `<div class="jogo-filtros">${tab === "stats" ? grupoJanela : ""}${grupoEscopo}${tab === "stats" ? grupoMando : ""}</div>`;
 
   const teamsHead = `
@@ -3894,8 +3896,9 @@ function renderJogo(){
   } else if (tab === "esc"){
     corpo = escalacoesCorpo(fx, fi);
   } else {
-    const mandoH = mandoSel === "mando" ? true : null;
-    const mandoA = mandoSel === "mando" ? false : null;
+    // filtro simétrico: "Em casa" = jogos em casa DOS DOIS times; "Fora" = fora dos dois
+    const mv = mandoSel === "casa" ? true : mandoSel === "fora" ? false : null;
+    const mandoH = mv, mandoA = mv;
     const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo, mandoH);
     const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo, mandoA);
     if (rxH && rxA){
@@ -3910,7 +3913,7 @@ function renderJogo(){
       };
       const grupo = (titulo, linhas) => linhas.trim() ? `<div class="rx-group"><div class="rx-group-t">${titulo}</div>${linhas}</div>` : "";
       corpo = `
-        <div class="rx-sample">amostra: ${rxH.jogos} jogo${rxH.jogos===1?"":"s"} do ${fx.home} · ${rxA.jogos} jogo${rxA.jogos===1?"":"s"} do ${fx.away}${state.rxEscopo==="comp" ? (ehContinental ? " em copas continentais" : ` (só ${fx.competicao})`) : ""}${(rxH.jogos < state.rxJanela || rxA.jogos < state.rxJanela) ? " (todos os disponíveis)" : ""}${(rxH.inclui2025 || rxA.inclui2025) ? " · inclui temporada 2025" : ""}${mandoSel === "mando" ? ` · ${fx.home} só EM CASA × ${fx.away} só FORA` : ""}</div>
+        <div class="rx-sample">amostra: ${rxH.jogos} jogo${rxH.jogos===1?"":"s"} do ${fx.home} · ${rxA.jogos} jogo${rxA.jogos===1?"":"s"} do ${fx.away}${state.rxEscopo==="comp" ? (ehContinental ? " em copas continentais" : ` (só ${fx.competicao})`) : ""}${(rxH.jogos < state.rxJanela || rxA.jogos < state.rxJanela) ? " (todos os disponíveis)" : ""}${(rxH.inclui2025 || rxA.inclui2025) ? " · inclui temporada 2025" : ""}${mandoSel === "casa" ? " · só jogos EM CASA dos dois times" : mandoSel === "fora" ? " · só jogos FORA DE CASA dos dois times" : ""}</div>
         ${grupo("Ataque", linha("gols", "Gols marcados", rxH.gols, rxA.gols) + linha("fin", "Finalizações", rxH.fin, rxA.fin) + linha("chutesGol", "Chutes a gol", rxH.chutesGol, rxA.chutesGol) + linha("cantos", "Escanteios", rxH.cantos, rxA.cantos))}
         ${grupo("Defesa", linha("golsSof", "Gols sofridos", rxH.golsSof, rxA.golsSof) + linha("finSof", "Finalizações sofridas", rxH.finSof, rxA.finSof) + linha("cantosSof", "Escanteios cedidos", rxH.cantosSof, rxA.cantosSof) + linha("defesas", "Defesas de goleiro", rxH.defesas, rxA.defesas))}
         ${grupo("Disciplina", linha("faltas", "Faltas cometidas", rxH.faltas, rxA.faltas) + linha("amarelos", "Cartões amarelos", rxH.amarelos, rxA.amarelos) + linha("vermelhos", "Cartões vermelhos", rxH.vermelhos, rxA.vermelhos, 2))}
