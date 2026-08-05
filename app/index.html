@@ -3417,11 +3417,11 @@ function renderJogadorSimples(){
       <div class="rx-sample" style="margin-top:10px">amostra: ${hist.length} jogo${hist.length===1?"":"s"}${escopo==="comp" ? (ehContinental ? " em copas continentais" : ` (só ${fx.competicao})`) : ""} · caixinhas: da esquerda (mais antigo) pra direita (mais recente)</div>
       ${tabsStat}
       ${grafico}
-      <div class="tend-box" style="margin-top:14px">${tendencias}</div>
-      <button class="h2h-cardbtn" onclick="abrirCardJogador('${statSel}')">
+      <button class="h2h-cardbtn" style="margin-top:10px" onclick="abrirCardJogador('${statSel}')">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4M8 11l4 4 4-4M12 15V3"/></svg>
-        Gerar card
+        Gerar card · ${metaSel[1]}
       </button>
+      <div class="tend-box" style="margin-top:14px">${tendencias}</div>
       <div class="section-h" style="margin-top:8px"><span class="lbl">Jogo a jogo</span><span class="count tnum">${hist.length} jogos</span></div>
       <div class="jg-list">${extrato}</div>`;
   } else {
