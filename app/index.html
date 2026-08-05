@@ -869,6 +869,10 @@
   .qt-box.e { background: var(--surface); color: var(--muted); border: 1px solid var(--border-soft); }
   .qt-box.d { background: color-mix(in srgb, #E05A4E 18%, transparent); color: #E05A4E; }
   .svgi { width: 1.05em; height: 1.05em; vertical-align: -0.15em; display: inline-block; flex: none; }
+  .stat-sel { appearance: none; -webkit-appearance: none; background: var(--panel2, rgba(255,255,255,0.05)) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2393A399' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+    color: var(--txt); border: 1px solid var(--line, rgba(255,255,255,0.12)); border-radius: 5px;
+    font: 700 12.5px/1 inherit; font-family: inherit; padding: 8px 28px 8px 12px; cursor: pointer; }
+  .stat-sel:hover { border-color: var(--acc); }
   .qt-seqline { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700;
     padding: 8px 10px; background: var(--surface); border-left: 3px solid var(--acc); border-radius: 6px; margin-bottom: 6px; }
   .qt-seqline .ico { font-size: 14px; }
@@ -2114,6 +2118,26 @@ function abrirCard(fi, key, label, a, b, dec, sufixo){
     extratoH: extrato(fx.homeId), extratoA: extrato(fx.awayId), formato: "sticker" };
   montarCardModal();
 }
+/* Atalho do seletor de estatística: escolhe no dropdown → abre o card na hora */
+const STAT_META = {
+  gols: ["Gols marcados", 1, ""], fin: ["Finalizações", 1, ""], chutesGol: ["Chutes a gol", 1, ""],
+  cantos: ["Escanteios", 1, ""], golsSof: ["Gols sofridos", 1, ""], finSof: ["Finalizações sofridas", 1, ""],
+  cantosSof: ["Escanteios cedidos", 1, ""], defesas: ["Defesas de goleiro", 1, ""],
+  faltas: ["Faltas cometidas", 1, ""], amarelos: ["Cartões amarelos", 1, ""], vermelhos: ["Cartões vermelhos", 2, ""],
+  posse: ["Posse de bola", 0, "%"], laterais: ["Arremessos laterais", 1, ""], tiroMeta: ["Tiros de meta", 1, ""],
+};
+function irEstatistica(fi, sel){
+  const key = sel.value;
+  sel.selectedIndex = 0; // volta pro placeholder (permite repetir a escolha)
+  if (!key || !STAT_META[key]) return;
+  const fx = FIXTURES[fi];
+  const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo, null);
+  const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo, null);
+  const [label, dec, sufixo] = STAT_META[key];
+  if (!rxH || !rxA || rxH[key] == null || rxA[key] == null) return;
+  abrirCard(fi, key, label, rxH[key], rxA[key], dec, sufixo);
+}
+
 /* Card postável do confronto direto (retrospecto + tendências + últimos resultados) */
 function abrirCardH2H(fi){
   const fx = FIXTURES[fi];
@@ -3874,7 +3898,16 @@ function renderJogo(){
   const chipM = (m, txt) => `<button class="chip ${mandoSel===m?'on':''}" onclick="setRxMando('${m}')">${txt}</button>`;
   const grupoMando = temMando ? `<div class="qlabel">Mando de campo?</div>
     <div class="filters">${chipM("todos", "Todos")}${chipM("casaH", `${fx.home} · casa`)}${chipM("foraA", `${fx.away} · fora`)}</div>` : "";
-  const filtrosRow = tab === "esc" ? "" : `<div class="jogo-filtros">${tab === "stats" ? grupoJanela : ""}${grupoEscopo}${tab === "stats" ? grupoMando : ""}</div>`;
+  // atalho estilo Excel: escolhe a estatística → cai direto no card postável
+  const grupoStat = `<div class="qlabel">Ir direto pra uma estatística?</div>
+    <div class="filters"><select class="stat-sel" onchange="irEstatistica(${fi}, this)">
+      <option value="">Escolher estatística…</option>
+      <optgroup label="Ataque"><option value="gols">Gols marcados</option><option value="fin">Finalizações</option><option value="chutesGol">Chutes a gol</option><option value="cantos">Escanteios</option></optgroup>
+      <optgroup label="Defesa"><option value="golsSof">Gols sofridos</option><option value="finSof">Finalizações sofridas</option><option value="cantosSof">Escanteios cedidos</option><option value="defesas">Defesas de goleiro</option></optgroup>
+      <optgroup label="Disciplina"><option value="faltas">Faltas cometidas</option><option value="amarelos">Cartões amarelos</option><option value="vermelhos">Cartões vermelhos</option></optgroup>
+      <optgroup label="Controle"><option value="posse">Posse de bola</option><option value="laterais">Arremessos laterais</option><option value="tiroMeta">Tiros de meta</option></optgroup>
+    </select></div>`;
+  const filtrosRow = tab === "esc" ? "" : `<div class="jogo-filtros">${tab === "stats" ? grupoJanela : ""}${grupoEscopo}${tab === "stats" ? grupoMando : ""}${tab === "stats" ? grupoStat : ""}</div>`;
 
   const teamsHead = `
     <div class="rx-teams-head">
