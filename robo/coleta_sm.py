@@ -109,7 +109,7 @@ POS = {24: "Goleiro", 25: "Defensor", 26: "Meia", 27: "Atacante"}
 T_TIME = {42: "fin", 86: "chutesGol", 34: "cantos", 56: "faltas",
           84: "amarelos", 83: "vermelhos", 45: "posse", 57: "defesas",
           60: "laterais", 53: "tiroMeta"}
-T_JOG = {42: "f", 86: "o", 52: "g", 56: "fc", 96: "fs", 84: "am", 83: "vm", 119: "m"}
+T_JOG = {42: "f", 86: "o", 52: "g", 56: "fc", 96: "fs", 84: "am", 83: "vm", 119: "m", 78: "ds", 80: "ps"}
 TIPO_TITULAR = 11
 REF_PRINCIPAL = 6
 LIGAS_BR_REF = [648, 651, 654, 1116, 1122]   # histórico de árbitro (mercado BR)
@@ -252,9 +252,10 @@ for tid, tname in teams.items():
                     "t": jt["ts"], "l": jt["liga"], "a": adversario(det, tid),
                     "m": vals["m"], "f": vals["f"], "o": vals["o"], "g": vals["g"],
                     "fc": vals["fc"], "fs": vals["fs"], "am": vals["am"], "vm": vals["vm"]})
-            a = acum.setdefault(pid, {"apps": 0, "f": 0, "o": 0, "fc": 0, "fs": 0, "df": 0, "min": 0, "g": 0})
+            a = acum.setdefault(pid, {"apps": 0, "f": 0, "o": 0, "fc": 0, "fs": 0, "df": 0, "min": 0, "g": 0, "ds": 0, "ps": 0})
             a["apps"] += 1; a["min"] += vals["m"]; a["g"] += vals["g"]
             a["f"] += vals["f"]; a["o"] += vals["o"]; a["fc"] += vals["fc"]; a["fs"] += vals["fs"]
+            a["ds"] += vals["ds"]; a["ps"] += vals["ps"]
             for dd in (lu.get("details") or []):
                 if dd.get("type_id") == 57:
                     a["df"] += (dd.get("data") or {}).get("value") or 0
@@ -296,6 +297,8 @@ for tid in teams:
                       "faltasCom": round(a["fc"] / a["apps"], 2),
                       "faltasSof": round(a["fs"] / a["apps"], 2),
                       "defesas": round(a["df"] / a["apps"], 2),
+                      "desarmes": round(a["ds"] / a["apps"], 2),
+                      "passes": round(a["ps"] / a["apps"], 1),
                       "_pid": pid, "_min": a["min"], "_g": a["g"]})
     lista.sort(key=lambda x: x["media"], reverse=True)
     if lista: elencos[str(tid)] = lista

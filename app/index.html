@@ -1391,6 +1391,7 @@ const STAT_SEL = {
   faltas: j=>j.own.faltas, faltasSof: j=>j.adv.faltas,
   amarelos: j=>j.own.amarelos, vermelhos: j=>j.own.vermelhos,
   posse: j=>j.own.posse, defesas: j=>j.own.defesas,
+  laterais: j=>j.own.laterais ?? null, tiroMeta: j=>j.own.tiroMeta ?? null,
 };
 function computeRx(tid, ligaId, janela, escopo){
   const jogos = getJogosRx(tid, ligaId, janela, escopo);
@@ -1409,6 +1410,7 @@ function computeRx(tid, ligaId, janela, escopo){
     faltas: med(j=>j.own.faltas), faltasSof: med(j=>j.adv.faltas),
     amarelos: med(j=>j.own.amarelos), vermelhos: med(j=>j.own.vermelhos),
     posse: med(j=>j.own.posse), defesas: med(j=>j.own.defesas),
+    laterais: med(j=>j.own.laterais ?? null), tiroMeta: med(j=>j.own.tiroMeta ?? null),
   };
 }
 
@@ -2108,6 +2110,8 @@ const H2H_STAT_SEL = {
   amarelos: { a: j=>j.statsA.amarelos ?? null, b: j=>j.statsB.amarelos ?? null },
   vermelhos: { a: j=>j.statsA.vermelhos ?? null, b: j=>j.statsB.vermelhos ?? null },
   posse: { a: j=>j.statsA.posse ?? null, b: j=>j.statsB.posse ?? null },
+  laterais: { a: j=>j.statsA.laterais ?? null, b: j=>j.statsB.laterais ?? null },
+  tiroMeta: { a: j=>j.statsA.tiroMeta ?? null, b: j=>j.statsB.tiroMeta ?? null },
 };
 function abrirCardH2HStat(fi, key, label, a, b, dec, sufixo){
   const fx = FIXTURES[fi];
@@ -2980,6 +2984,8 @@ function renderJogadorSimples(){
       ladder(g => g.f, [1, 2, 3], { icon: "🎯", txt: "finalizações" }) +
       ladder(g => g.o, [1, 2], { icon: "⚽", txt: "chutes a gol" }) +
       ladder(g => g.fs, [2], { icon: "🤕", txt: "faltas sofridas" }) +
+      (hist.some(g => g.ds != null) ? ladder(g => g.ds ?? 0, [1, 2, 3], { icon: "🛡️", txt: "desarmes" }) : "") +
+      (hist.some(g => g.ps != null) ? ladder(g => g.ps ?? 0, [20, 30, 40], { icon: "📨", txt: "passes" }) : "") +
       ladder(g => g.m, [60], { icon: "⏱️", txt: "minutos em campo" });
 
     const extrato = hist.map(g => `
@@ -2987,7 +2993,7 @@ function renderJogadorSimples(){
         <span class="jg-date">${dataBR(g.t)}</span>
         <span class="jg-adv">× ${g.a}</span>
         <span class="jg-min tnum">${g.m}'</span>
-        <span class="jg-vals"><b class="amber tnum">${g.f}</b> fin · <b class="acc tnum">${g.o}</b> a gol${g.g ? ` · <b class="tnum">${g.g}</b> gol${g.g>1?"s":""} ⚽` : ""}</span>
+        <span class="jg-vals"><b class="amber tnum">${g.f}</b> fin · <b class="acc tnum">${g.o}</b> a gol${g.ds != null ? ` · <b class="tnum">${g.ds}</b> des` : ""}${g.ps != null ? ` · <b class="tnum">${g.ps}</b> passes` : ""}${g.g ? ` · <b class="tnum">${g.g}</b> gol${g.g>1?"s":""} ⚽` : ""}</span>
       </div>`).join("");
 
     corpo = `
@@ -3322,7 +3328,9 @@ function h2hCorpo(fx, escopo, fi){
     linhaH("faltas", "Faltas cometidas", med(j=>j.statsA.faltas ?? null), med(j=>j.statsB.faltas ?? null)) +
     linhaH("amarelos", "Cartões amarelos", med(j=>j.statsA.amarelos ?? null), med(j=>j.statsB.amarelos ?? null)) +
     linhaH("vermelhos", "Cartões vermelhos", med(j=>j.statsA.vermelhos ?? null), med(j=>j.statsB.vermelhos ?? null), 2) +
-    linhaH("posse", "Posse de bola", med(j=>j.statsA.posse ?? null), med(j=>j.statsB.posse ?? null), 0, "%");
+    linhaH("posse", "Posse de bola", med(j=>j.statsA.posse ?? null), med(j=>j.statsB.posse ?? null), 0, "%") +
+    linhaH("laterais", "Arremessos laterais", med(j=>j.statsA.laterais ?? null), med(j=>j.statsB.laterais ?? null)) +
+    linhaH("tiroMeta", "Tiros de meta", med(j=>j.statsA.tiroMeta ?? null), med(j=>j.statsB.tiroMeta ?? null));
   const mediasBloco = linhasMedias.trim()
     ? `<div class="rx-group" style="margin-bottom:16px"><div class="rx-group-t">Médias por jogo · só nestes confrontos</div>${linhasMedias}</div>`
     : "";
@@ -3709,7 +3717,7 @@ function renderJogo(){
         ${grupo("Ataque", linha("gols", "Gols marcados", rxH.gols, rxA.gols) + linha("fin", "Finalizações", rxH.fin, rxA.fin) + linha("chutesGol", "Chutes a gol", rxH.chutesGol, rxA.chutesGol) + linha("cantos", "Escanteios", rxH.cantos, rxA.cantos))}
         ${grupo("Defesa", linha("golsSof", "Gols sofridos", rxH.golsSof, rxA.golsSof) + linha("finSof", "Finalizações sofridas", rxH.finSof, rxA.finSof) + linha("cantosSof", "Escanteios cedidos", rxH.cantosSof, rxA.cantosSof) + linha("defesas", "Defesas de goleiro", rxH.defesas, rxA.defesas))}
         ${grupo("Disciplina", linha("faltas", "Faltas cometidas", rxH.faltas, rxA.faltas) + linha("amarelos", "Cartões amarelos", rxH.amarelos, rxA.amarelos) + linha("vermelhos", "Cartões vermelhos", rxH.vermelhos, rxA.vermelhos, 2))}
-        ${grupo("Controle", linha("posse", "Posse de bola", rxH.posse, rxA.posse, 0, "%"))}`;
+        ${grupo("Controle", linha("posse", "Posse de bola", rxH.posse, rxA.posse, 0, "%") + linha("laterais", "Arremessos laterais", rxH.laterais, rxA.laterais) + linha("tiroMeta", "Tiros de meta", rxH.tiroMeta, rxA.tiroMeta))}`;
     } else {
       corpo = `<div class="empty-box" style="margin-top:6px">Um dos times ainda não tem jogos suficientes ${state.rxEscopo==="comp" ? (ehContinental ? "em copas continentais" : `no ${fx.competicao}`) : ""} pra calcular médias — em "Quais jogos?", troque pra "Todos os jogos".</div>`;
     }
