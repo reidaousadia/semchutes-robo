@@ -102,7 +102,7 @@ def apita(c):
         partes.append(f"*{b['team']['name']}*{form}:")
         partes.append(xi)
         partes.append("")
-    partes.append("📊 raio-x completo: semchutes.com.br")
+    partes.append("📊 raio-x completo: apitou.com.br")
     if telegram("\n".join(partes)):
         estado["alertados"].append(c["fid"])
         salva_estado()

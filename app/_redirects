@@ -1,2 +1,6 @@
+# dominio antigo redireciona pro novo (301 preserva links postados)
+https://semchutes.com.br/*      https://apitou.com.br/:splat  301!
+https://www.semchutes.com.br/*  https://apitou.com.br/:splat  301!
+
 /media/*  https://media.api-sports.io/:splat  200
 /smimg/*  https://cdn.sportmonks.com/:splat  200
