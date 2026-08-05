@@ -104,7 +104,7 @@ LIGAS = {
     779:  ("MLS",                "liga",        "am",       2),
     1479: ("Concacaf League",    "continental", "concacaf", 2),
 }
-FINALIZADO = ("FT", "AET", "FT_PEN")
+FINALIZADO = ("FT", "AET", "FTP", "FT_PEN", "PEN")  # FTP = decidido nos pênaltis (caso Boca×O'Higgins)
 POS = {24: "Goleiro", 25: "Defensor", 26: "Meia", 27: "Atacante"}
 T_TIME = {42: "fin", 86: "chutesGol", 34: "cantos", 56: "faltas",
           84: "amarelos", 83: "vermelhos", 45: "posse", 57: "defesas",
@@ -113,6 +113,11 @@ T_JOG = {42: "f", 86: "o", 52: "g", 56: "fc", 96: "fs", 84: "am", 83: "vm", 119:
 TIPO_TITULAR = 11
 REF_PRINCIPAL = 6
 LIGAS_BR_REF = [648, 651, 654, 1116, 1122]   # histórico de árbitro (mercado BR)
+
+def data_local(starting_at):
+    """Data BRT do jogo (starting_at vem em UTC) — jogo de 21h30 não vira 'amanhã'."""
+    dt = datetime.fromisoformat(starting_at.replace(" ", "T")).replace(tzinfo=timezone.utc)
+    return dt.astimezone(BRT).date().isoformat()
 
 def liga_nome(lid): return LIGAS.get(lid, (f"Liga {lid}",))[0]
 def liga_tier(lid): return LIGAS.get(lid, (None, None, None, 2))[3]
@@ -186,7 +191,7 @@ def lista_time(tid, meses):
         for fx in sm_paginado(f"/fixtures/between/{ini.isoformat()}/{fim.isoformat()}/{tid}",
                               include="state"):
             if (fx.get("state") or {}).get("short_name") in FINALIZADO and fx.get("league_id") in LIGAS:
-                out.append({"fid": fx["id"], "ts": fx["starting_at"][:10], "liga": fx["league_id"]})
+                out.append({"fid": fx["id"], "ts": data_local(fx["starting_at"]), "liga": fx["league_id"]})
         fim = ini - timedelta(days=1)
     out.sort(key=lambda x: x["ts"], reverse=True)
     return out
@@ -344,7 +349,7 @@ for fx in semana:
             def soma(*chaves):
                 v = [s.get(c) for s in (sH, sA) for c in chaves if s.get(c) is not None]
                 return int(sum(v)) if v else None
-            confs.append({"ts": x["starting_at"][:10], "comp": liga_nome(x.get("league_id")),
+            confs.append({"ts": data_local(x["starting_at"]), "comp": liga_nome(x.get("league_id")),
                           "idH": casa["id"], "idA": fora["id"], "nH": casa["name"], "nA": fora["name"],
                           "gH": gH, "gA": gA, "sH": sH, "sA": sA,
                           "ca": soma("cantos"), "ct": soma("amarelos", "vermelhos"), "df": soma("defesas")})
@@ -434,7 +439,7 @@ for _ in range(4):
             elif t == 56: fl += v
         nomes = sorted(fx2.get("participants", []), key=lambda p: (p.get("meta") or {}).get("location") != "home")
         por_ref.setdefault(ref2["id"], []).append({
-            "ts": fx2["starting_at"][:10], "jogo": " x ".join(p["name"] for p in nomes),
+            "ts": data_local(fx2["starting_at"]), "jogo": " x ".join(p["name"] for p in nomes),
             "am": am, "amC": amC, "amF": amF, "vm": vm, "faltas": fl})
     fim_ref = ini_ref - timedelta(days=1)
 for rid2 in por_ref:
