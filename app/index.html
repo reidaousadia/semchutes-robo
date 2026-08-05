@@ -1319,6 +1319,18 @@ function regiaoDe(lid){
   if (g === "am" || g === "concacaf" || g === "conmebol") return "am";
   return "br";
 }
+/* bandeira do país de cada competição (🏆 = continental) */
+const BANDEIRA_LIGA = {
+  648: "🇧🇷", 651: "🇧🇷", 657: "🇧🇷", 654: "🇧🇷",
+  1122: "🏆", 1116: "🏆", 2: "🏆", 5: "🏆", 2286: "🏆", 1328: "🏆", 1479: "🏆", 1251: "🏆",
+  8: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", 9: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", 564: "🇪🇸", 570: "🇪🇸", 384: "🇮🇹",
+  82: "🇩🇪", 85: "🇩🇪", 109: "🇩🇪", 301: "🇫🇷", 307: "🇫🇷",
+  72: "🇳🇱", 462: "🇵🇹", 468: "🇵🇹",
+  636: "🇦🇷", 642: "🇦🇷", 672: "🇨🇴", 743: "🇲🇽", 779: "🇺🇸",
+};
+function bandeiraDe(lid){
+  return BANDEIRA_LIGA[lid] || { br: "🇧🇷", eu: "🇪🇺", am: "🌎" }[regiaoDe(lid)] || "⚽";
+}
 function getHistJogador(tid, nome, janela, escopo, ligaId){
   let jogos = [...(((JOG_HIST[String(tid)] || {})[nome]) || [])];
   if (escopo === "comp" && ligaId){
@@ -1874,7 +1886,7 @@ function renderOportunidades(){
     let d = porDia.find(x => x.dia === dia);
     if (!d) { d = { dia, comps: [] }; porDia.push(d); }
     let c = d.comps.find(x => x.comp === item.fx.competicao);
-    if (!c) { c = { comp: item.fx.competicao, jogos: [] }; d.comps.push(c); }
+    if (!c) { c = { comp: item.fx.competicao, ligaId: item.fx.ligaId, jogos: [] }; d.comps.push(c); }
     c.jogos.push(item);
   });
   porDia.sort((a, b) => a.dia.localeCompare(b.dia));
@@ -1892,7 +1904,7 @@ function renderOportunidades(){
     const total = d.comps.reduce((a, c) => a + c.jogos.length, 0);
     const blocos = d.comps.map(c => `
       <div class="comp-block">
-        <div class="comp-head"><span class="comp-name">${c.comp}</span><span class="comp-count">${c.jogos.length} jogo${c.jogos.length===1?"":"s"}</span></div>
+        <div class="comp-head"><span class="comp-name">${bandeiraDe(c.ligaId)} ${c.comp}</span><span class="comp-count">${c.jogos.length} jogo${c.jogos.length===1?"":"s"}</span></div>
         <div class="fx-list">${rowsDoComp(c.jogos)}</div>
       </div>`).join("");
     return `<div class="day-block">
@@ -1906,7 +1918,7 @@ function renderOportunidades(){
   const bandeira = { br: "🇧🇷", eu: "🇪🇺", am: "🌎" };
   const lsItem = (lid, c) => `
     <button class="ls-item ${state.compFiltro===lid?'on':''}" onclick="setCompSide(${lid})">
-      <span>${bandeira[c.regiao] || "⚽"}</span><span class="ls-nm">${c.nome}</span>
+      <span>${bandeiraDe(lid)}</span><span class="ls-nm">${c.nome}</span>
       <span class="n tnum">${c.n}</span>
       <span class="ls-pin ${favs.includes(lid)?'on':''}" onclick="toggleFavLiga(event, ${lid})" title="${favs.includes(lid)?'Desafixar':'Fixar no topo'}">${favs.includes(lid)?'★':'☆'}</span>
     </button>`;
@@ -1954,7 +1966,7 @@ function renderOportunidades(){
     ${comps.length > 1 ? `<div class="comp-scroll filtros-mobile">
       <button class="chip ${state.compFiltro==null?'on':''}" onclick="setCompFiltro(null)">Todas as competições</button>
       ${comps.map(([lid, c]) =>
-        `<button class="chip ${state.compFiltro===lid?'on':''}" onclick="setCompFiltro(${lid})">${c.nome} <span class="chip-n">${c.n}</span></button>`).join("")}
+        `<button class="chip ${state.compFiltro===lid?'on':''}" onclick="setCompFiltro(${lid})">${bandeiraDe(lid)} ${c.nome} <span class="chip-n">${c.n}</span></button>`).join("")}
     </div>` : ""}
     <div class="lead-banner">
       <div class="lb-txt">
