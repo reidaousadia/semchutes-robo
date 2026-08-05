@@ -258,7 +258,8 @@ for tid, tname in teams.items():
                 equipe.setdefault(nome, []).append({
                     "t": jt["ts"], "l": jt["liga"], "a": adversario(det, tid), "c": foi_casa(det, tid),
                     "m": vals["m"], "f": vals["f"], "o": vals["o"], "g": vals["g"],
-                    "fc": vals["fc"], "fs": vals["fs"], "am": vals["am"], "vm": vals["vm"]})
+                    "fc": vals["fc"], "fs": vals["fs"], "am": vals["am"], "vm": vals["vm"],
+                    "ds": vals["ds"], "ps": vals["ps"]})
             a = acum.setdefault(pid, {"apps": 0, "f": 0, "o": 0, "fc": 0, "fs": 0, "df": 0, "min": 0, "g": 0, "ds": 0, "ps": 0})
             a["apps"] += 1; a["min"] += vals["m"]; a["g"] += vals["g"]
             a["f"] += vals["f"]; a["o"] += vals["o"]; a["fc"] += vals["fc"]; a["fs"] += vals["fs"]
@@ -336,7 +337,12 @@ for fx in semana:
     par = (min(a, b), max(a, b))
     if par not in vistos:
         lst = sm_paginado(f"/fixtures/head-to-head/{a}/{b}", include="state;participants;scores")
-        fin = [x for x in lst if (x.get("state") or {}).get("short_name") in FINALIZADO]
+        fin, ids_h2h = [], set()
+        for x in lst:
+            if (x.get("state") or {}).get("short_name") not in FINALIZADO: continue
+            if x["id"] in ids_h2h: continue  # a API às vezes repete fixtures entre páginas
+            ids_h2h.add(x["id"])
+            fin.append(x)
         fin.sort(key=lambda x: x["starting_at"], reverse=True)
         confs = []
         for x in fin[:12]:
