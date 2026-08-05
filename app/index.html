@@ -2835,17 +2835,23 @@ async function desenharArbitro(){
   const Y = o => py + o;
   x.textAlign = "center"; x.textBaseline = "middle";
 
-  // header: emoji + nome
+  // header: nome centralizado com fonte que encolhe até caber
+  // (emoji fora da medição — o canvas mede errado sequências como 👨‍⚖️)
   {
     const yT = Y(oHeader);
-    x.font = `800 44px ${UI}`;
+    let size = 44;
+    while (size > 26){
+      x.font = `800 ${size}px ${UI}`;
+      if (x.measureText(c.nome).width <= pw - 90) break;
+      size -= 2;
+    }
     let nome = c.nome;
-    while (x.measureText("👨‍⚖️  " + nome).width > pw - 100 && nome.length > 8) nome = nome.slice(0, -1);
+    while (x.measureText(nome).width > pw - 90 && nome.length > 6) nome = nome.slice(0, -1);
     x.fillStyle = "#EAF2EC";
-    x.fillText("👨‍⚖️  " + (nome === c.nome ? nome : nome + "…"), cx, yT);
+    x.fillText(nome === c.nome ? nome : nome + "…", cx, yT);
   }
   x.font = `700 26px ${MONO}`; x.fillStyle = "#F0B14A";
-  x.fillText("PERFIL DO ÁRBITRO", cx, Y(oSub));
+  x.fillText("⚖️ PERFIL DO ÁRBITRO", cx, Y(oSub));
   x.font = `500 22px ${MONO}`; x.fillStyle = "#93A399";
   x.fillText(c.contexto, cx, Y(oCtx));
 
