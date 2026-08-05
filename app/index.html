@@ -1266,6 +1266,23 @@ const ELENCOS = SEM.elencos || {};
 const H2H = SEM.h2h || {};
 /* Histórico jogo a jogo por jogador: { teamId: { nome: [{t,l,a,m,f,o,g,fc,fs,am,vm}] } } */
 const JOG_HIST = SEM.jogHist || {};
+/* v2b — catálogo de ligas: o app lê FLAGS (tipo/grupo), não IDs fixos.
+   Fallback legado (71/72 liga · 11/13 continental) pra dados antigos. */
+const LIGAS_CAT = SEM.ligas || {};
+function ligaInfo(lid){ return LIGAS_CAT[String(lid)] || {}; }
+function ehLigaRegular(lid){ const t = ligaInfo(lid).tipo; return t ? t === "liga" : (lid === 71 || lid === 72); }
+function ehContinentalLiga(lid){ const t = ligaInfo(lid).tipo; return t ? t === "continental" : (lid === 11 || lid === 13); }
+function ligasIrmas(lid){
+  const g = ligaInfo(lid).grupo;
+  if (g) return Object.keys(LIGAS_CAT).filter(k => LIGAS_CAT[k].tipo === "continental" && LIGAS_CAT[k].grupo === g).map(Number);
+  return [11, 13];
+}
+function regiaoDe(lid){
+  const g = ligaInfo(lid).grupo;
+  if (g === "eu" || g === "uefa") return "eu";
+  if (g === "am" || g === "concacaf") return "am";
+  return "br";
+}
 function getHistJogador(tid, nome, janela, escopo, ligaId){
   let jogos = [...(((JOG_HIST[String(tid)] || {})[nome]) || [])];
   if (escopo === "comp" && ligaId){
@@ -1305,11 +1322,10 @@ function getJogosRx(tid, ligaId, janela, escopo){
   // competição" busca nos jogos daquela liga, por mais antigos que sejam.
   // Copas continentais (decisão do Pedro, 2026-07-28): Sul-Americana e
   // Libertadores contam JUNTAS — times caem de uma pra outra no meio do ano.
-  const CONTINENTAIS = [11, 13];
   let jogos;
   if (escopo === "comp" && ligaId){
-    jogos = CONTINENTAIS.includes(ligaId)
-      ? CONTINENTAIS.flatMap(l => reg.liga?.[String(l)] || [])
+    jogos = ehContinentalLiga(ligaId)
+      ? ligasIrmas(ligaId).flatMap(l => reg.liga?.[String(l)] || [])
       : [...(reg.liga?.[String(ligaId)] || [])];
   } else {
     jogos = [...(reg.geral || [])];
@@ -1764,6 +1780,7 @@ function teamCrest(name){
   return `<div class="crest" style="background:hsl(${h} 30% 26% / .5); color:hsl(${h} 68% 70%)">${escudoOuIniciais(name)}</div>`;
 }
 function setDiaFiltro(d){ state.diaFiltro = d; render(); }
+function setRegiao(r){ state.regiaoFiltro = r; render(); }
 
 function renderOportunidades(){
   const filtro = state.diaFiltro || "semana";
@@ -1774,6 +1791,10 @@ function renderOportunidades(){
   // aplica o filtro por dia (nunca mostra jogos que já passaram)
   let visiveis = FIXTURES.map((fx, fi) => ({ fx, fi }))
     .filter(({ fx }) => diasDe(diaBRT(fx.kickoff)) >= 0);
+  // filtro por região (v2b — só aparece quando a agenda é multirregião)
+  const regioes = new Set(visiveis.map(({ fx }) => regiaoDe(fx.ligaId)));
+  const regiao = state.regiaoFiltro || "todos";
+  if (regiao !== "todos") visiveis = visiveis.filter(({ fx }) => regiaoDe(fx.ligaId) === regiao);
   const alvo = { hoje: 0, amanha: 1, depois: 2 }[filtro];
   if (alvo != null) visiveis = visiveis.filter(({ fx }) => diasDe(diaBRT(fx.kickoff)) === alvo);
 
@@ -1829,6 +1850,10 @@ function renderOportunidades(){
     <div class="filters" style="margin-top:20px">
       ${chipD("hoje", "Hoje")}${chipD("amanha", "Amanhã")}${chipD("depois", "Depois de amanhã")}${chipD("semana", "Semana toda")}
     </div>
+    ${regioes.size > 1 ? `<div class="filters" style="margin-top:8px">
+      ${[["todos","🌍 Tudo"],["br","🇧🇷 Brasil"],["eu","🇪🇺 Europa"],["am","🌎 Américas"]].map(([k, txt]) =>
+        `<button class="chip ${regiao===k?'on':''}" onclick="setRegiao('${k}')">${txt}</button>`).join("")}
+    </div>` : ""}
     <div class="lead-banner">
       <div class="lb-txt">
         <div class="t">Raio-x dos jogos do dia</div>
@@ -1919,7 +1944,7 @@ function abrirCard(fi, key, label, a, b, dec, sufixo){
   const fx = FIXTURES[fi];
   const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo);
   const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo);
-  const ehContinental = fx.ligaId === 11 || fx.ligaId === 13;
+  const ehContinental = ehContinentalLiga(fx.ligaId);
   let contexto = `média dos últimos ${Math.max(rxH?.jogos||0, rxA?.jogos||0)} jogos`;
   if (state.rxEscopo === "comp") contexto += ehContinental ? " · copas continentais" : ` · ${fx.competicao}`;
   if (rxH?.inclui2025 || rxA?.inclui2025) contexto += " · inclui temporada 2025";
@@ -1949,7 +1974,7 @@ function abrirCardQuentes(fi){
   const fx = FIXTURES[fi];
   const fH = formaTime(fx.homeId, fx.ligaId, state.rxEscopo);
   const fA = formaTime(fx.awayId, fx.ligaId, state.rxEscopo);
-  const ehContinental = fx.ligaId === 11 || fx.ligaId === 13;
+  const ehContinental = ehContinentalLiga(fx.ligaId);
   const escLabel = state.rxEscopo === "comp" ? (ehContinental ? "copas continentais" : fx.competicao) : "todas as competições";
   state.card = { fx, tipo: "quentes", label: "quentes", formato: "sticker",
     contexto: `últimos ${Math.max(fH?.n||0, fA?.n||0)} jogos · ${escLabel}`, fH, fA };
@@ -2803,7 +2828,7 @@ function renderJogadorSimples(){
   // ----- histórico jogo a jogo sob o filtro ativo -----
   const janela = state.jgJanela || 10, escopo = state.jgEscopo || "geral";
   const hist = goleiro ? [] : getHistJogador(tid, j.name, janela, escopo, fx.ligaId);
-  const ehContinental = fx.ligaId === 11 || fx.ligaId === 13;
+  const ehContinental = ehContinentalLiga(fx.ligaId);
   const labelComp = ehContinental ? "Só continentais" : `Só ${fx.competicao}`;
   const chipJg = n => `<button class="chip ${janela===n?'on':''}" onclick="setJgJanela(${n})">Últimos ${n}</button>`;
   const chipEs = (e, label) => `<button class="chip ${escopo===e?'on':''}" onclick="setJgEscopo('${e}')">${label}</button>`;
@@ -2908,7 +2933,7 @@ function abrirCardJogador(){
   const janela = state.jgJanela || 10, escopo = state.jgEscopo || "geral";
   const hist = getHistJogador(tid, j.name, janela, escopo, fx.ligaId);
   if (!hist.length) return;
-  const ehContinental = fx.ligaId === 11 || fx.ligaId === 13;
+  const ehContinental = ehContinentalLiga(fx.ligaId);
   const escLabel = escopo === "comp" ? (ehContinental ? "copas continentais" : fx.competicao) : "todas as competições";
   state.card = { tipo: "jogador", formato: "sticker", label: "forma",
     nome: j.name, time: tname, pos: j.pos || "",
@@ -3079,8 +3104,10 @@ function toggleElenco(side){ state.elencoAberto[side] = !state.elencoAberto[side
 function confrontosDoJogo(fx, escopo){
   let lista = H2H[String(fx.id)] || [];
   if (escopo === "comp"){
-    const ehContinental = fx.ligaId === 11 || fx.ligaId === 13;
-    const alvos = ehContinental ? ["Sul-Americana", "Libertadores"] : [fx.competicao];
+    const ehContinental = ehContinentalLiga(fx.ligaId);
+    const alvos = ehContinental
+      ? ligasIrmas(fx.ligaId).map(l => ligaInfo(l).nome || (l === 11 ? "Sul-Americana" : "Libertadores"))
+      : [fx.competicao];
     lista = lista.filter(c => alvos.includes(c.comp));
   }
   return lista;
@@ -3137,7 +3164,7 @@ function h2hView(fx, escopo, sub){
     mk(j => j.ca, H2H_LINHAS.escanteios, "escanteios", "🚩"),
     mk(j => j.df, H2H_LINHAS.defesas, "defesas de goleiro", "🧤"),
   ].filter(Boolean);
-  const ehContinental = fx.ligaId === 11 || fx.ligaId === 13;
+  const ehContinental = ehContinentalLiga(fx.ligaId);
   const escLabel = escopo === "comp" ? (ehContinental ? "copas continentais" : fx.competicao) : "todas as competições";
   const subLabel = sub === "casaA" ? "Casa do " + fx.home : sub === "casaB" ? "Casa do " + fx.away : `últimos ${jogos.length}`;
   return { jogos, vA, e, vB, gA, gB, tend, contexto: `${subLabel} · ${escLabel}` };
@@ -3145,7 +3172,7 @@ function h2hView(fx, escopo, sub){
 /* Miolo do confronto direto (sem wrapper: entra no rx-card compartilhado com o raio-x) */
 function h2hCorpo(fx, escopo, fi){
   const { jogos: todos } = computaH2H(fx, escopo);
-  const ehContinental = fx.ligaId === 11 || fx.ligaId === 13;
+  const ehContinental = ehContinentalLiga(fx.ligaId);
   if (!todos.length){
     const msg = escopo === "comp"
       ? `Sem confronto direto ${ehContinental ? "em copas continentais" : `no ${fx.competicao}`} na base — em "Quais jogos?", troque pra "Todos os jogos".`
@@ -3514,8 +3541,8 @@ function renderJogo(){
   const fi = state.jogoAberto ?? 0;
   const fx = FIXTURES[fi];
 
-  const ehLiga = fx.ligaId === 71 || fx.ligaId === 72;  // liga regular: histórico alcança a temporada 2025
-  const ehContinental = fx.ligaId === 11 || fx.ligaId === 13;
+  const ehLiga = ehLigaRegular(fx.ligaId);  // liga regular: janela de até 30 jogos
+  const ehContinental = ehContinentalLiga(fx.ligaId);
   const tab = state.jogoTab || "stats";
 
   // ----- Abas grandes: a pergunta que o usuário tem na cabeça -----
@@ -3562,7 +3589,7 @@ function renderJogo(){
       };
       const grupo = (titulo, linhas) => linhas.trim() ? `<div class="rx-group"><div class="rx-group-t">${titulo}</div>${linhas}</div>` : "";
       corpo = `
-        <div class="rx-sample">amostra: ${rxH.jogos} jogo${rxH.jogos===1?"":"s"} do ${fx.home} · ${rxA.jogos} jogo${rxA.jogos===1?"":"s"} do ${fx.away}${state.rxEscopo==="comp" ? (ehContinental ? " em copas continentais (Libertadores + Sul-Americana)" : ` (só ${fx.competicao})`) : ""}${(rxH.jogos < state.rxJanela || rxA.jogos < state.rxJanela) ? " (todos os disponíveis)" : ""}${(rxH.inclui2025 || rxA.inclui2025) ? " · inclui temporada 2025" : ""}</div>
+        <div class="rx-sample">amostra: ${rxH.jogos} jogo${rxH.jogos===1?"":"s"} do ${fx.home} · ${rxA.jogos} jogo${rxA.jogos===1?"":"s"} do ${fx.away}${state.rxEscopo==="comp" ? (ehContinental ? " em copas continentais" : ` (só ${fx.competicao})`) : ""}${(rxH.jogos < state.rxJanela || rxA.jogos < state.rxJanela) ? " (todos os disponíveis)" : ""}${(rxH.inclui2025 || rxA.inclui2025) ? " · inclui temporada 2025" : ""}</div>
         ${grupo("Ataque", linha("gols", "Gols marcados", rxH.gols, rxA.gols) + linha("fin", "Finalizações", rxH.fin, rxA.fin) + linha("chutesGol", "Chutes a gol", rxH.chutesGol, rxA.chutesGol) + linha("cantos", "Escanteios", rxH.cantos, rxA.cantos))}
         ${grupo("Defesa", linha("golsSof", "Gols sofridos", rxH.golsSof, rxA.golsSof) + linha("finSof", "Finalizações sofridas", rxH.finSof, rxA.finSof) + linha("cantosSof", "Escanteios cedidos", rxH.cantosSof, rxA.cantosSof) + linha("defesas", "Defesas de goleiro", rxH.defesas, rxA.defesas))}
         ${grupo("Disciplina", linha("faltas", "Faltas cometidas", rxH.faltas, rxA.faltas) + linha("amarelos", "Cartões amarelos", rxH.amarelos, rxA.amarelos) + linha("vermelhos", "Cartões vermelhos", rxH.vermelhos, rxA.vermelhos, 2))}
