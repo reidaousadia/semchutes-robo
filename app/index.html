@@ -644,7 +644,7 @@
     font-family: var(--f-mono); font-size: 12.5px; font-weight: 700; color: var(--muted);
     position: relative; cursor: default; }
   /* tooltip: contra quem foi aquele jogo */
-  .bx[data-tip]:hover::after {
+  .bx[data-tip]:hover::after, .spark i[data-tip]:hover::after {
     content: attr(data-tip);
     position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
     background: var(--surface); color: var(--text); border: 1px solid var(--border);
@@ -652,7 +652,7 @@
     padding: 5px 9px; border-radius: 7px; box-shadow: 0 4px 14px rgba(0,0,0,.45);
     z-index: 50; pointer-events: none;
   }
-  .bx[data-tip]:hover::before {
+  .bx[data-tip]:hover::before, .spark i[data-tip]:hover::before {
     content: ""; position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%) rotate(45deg);
     width: 9px; height: 9px; background: var(--surface); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
     z-index: 51; pointer-events: none;
@@ -874,7 +874,7 @@
     font: 700 12.5px/1 inherit; font-family: inherit; padding: 8px 28px 8px 12px; cursor: pointer; }
   .stat-sel:hover { border-color: var(--acc); }
   .spark { display: flex; align-items: flex-end; gap: 3px; height: 26px; flex: 1; margin: 0 16px; min-width: 60px; }
-  .spark i { flex: 1; max-width: 16px; border-radius: 2.5px 2.5px 0 0; background: var(--acc); }
+  .spark i { flex: 1; max-width: 16px; border-radius: 2.5px 2.5px 0 0; background: var(--acc); position: relative; cursor: default; }
   .solo-row { display: flex; align-items: center; padding: 8px 4px; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; border-radius: 6px; }
   .solo-row:hover { background: rgba(255,255,255,0.035); }
   .solo-row .val { font-weight: 800; min-width: 70px; font-size: 15.5px; }
@@ -4161,15 +4161,20 @@ function renderJogo(){
         // sparkline jogo a jogo: preenche a linha com o dado real (constância × picos)
         const jogosSel = getJogosRx(tidS, fx.ligaId, state.rxJanela, state.rxEscopo, emCasa);
         const corSel = emCasa ? "var(--acc)" : "#F0B14A";
+        const dataBR2 = ts => ts ? ts.slice(5).split("-").reverse().join("/") : "";
         const spark = key => {
           const sel = STAT_SEL[key]; if (!sel) return `<span class="spark"></span>`;
-          const vs = [...jogosSel].reverse().map(j => { const v = sel(j); return v == null ? null : v; });
+          const js = [...jogosSel].reverse();
+          const vs = js.map(j => { const v = sel(j); return v == null ? null : v; });
           const nums = vs.filter(v => v != null);
           if (!nums.length) return `<span class="spark"></span>`;
           const max = Math.max(...nums, 0.001);
-          return `<span class="spark">${vs.map(v => v == null
-            ? `<i style="height:8%; background:#3A453E"></i>`
-            : `<i style="height:${Math.max(10, v/max*100)}%; background:${corSel}"></i>`).join("")}</span>`;
+          return `<span class="spark">${vs.map((v, i) => {
+            const tip = `${v == null ? "sem dado" : v} × ${js[i].advNome || "?"} · ${dataBR2(js[i].ts)}`;
+            return v == null
+              ? `<i data-tip="${tip}" style="height:8%; background:#3A453E"></i>`
+              : `<i data-tip="${tip}" style="height:${Math.max(10, v/max*100)}%; background:${corSel}"></i>`;
+          }).join("")}</span>`;
         };
         const linhaS = (key, label, a, dec=1, sufixo="") => {
           if (a == null) return "";
