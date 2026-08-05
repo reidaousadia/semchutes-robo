@@ -883,6 +883,9 @@
   .solo-row .lbl { color: var(--txt2, #B9C4BD); font-size: 13.5px; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
   .mchip { display: inline-flex; align-items: center; margin: 0 7px; position: relative; cursor: default; vertical-align: -2px; }
   .mchip .svgi { width: 15px; height: 15px; }
+  .card-tgl { display: inline-flex; align-items: center; margin-left: 7px; padding: 4px; cursor: pointer; opacity: .55; vertical-align: -3px; border-radius: 5px; }
+  .card-tgl:hover { opacity: 1; background: rgba(255,255,255,0.07); }
+  .rx-row.rx-open { background: rgba(47,208,138,0.05); border-radius: 8px; }
   .qt-seqline { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700;
     padding: 8px 10px; background: var(--surface); border-left: 3px solid var(--acc); border-radius: 6px; margin-bottom: 6px; }
   .qt-seqline .ico { font-size: 14px; }
@@ -1572,7 +1575,7 @@ function go(view, playerId, qiFixture, qiPlayer, jogoIdx){
   if (qiPlayer != null) state.qiPlayer = qiPlayer;
   if (jogoIdx != null) { state.jogoAberto = jogoIdx; state.elencoAberto = {};
     // ao abrir um jogo: aba Números · Últimos 10 · só a competição do jogo
-    state.jogoTab = "stats"; state.rxEscopo = "geral"; state.rxJanela = 10; state.h2hSub = "ult"; state.rxMando = "todos"; }
+    state.jogoTab = "stats"; state.rxEscopo = "geral"; state.rxJanela = 10; state.h2hSub = "ult"; state.rxMando = "todos"; state.rxChart = null; }
   const navMap = {
     "nav-oportunidades": ["oportunidades","jogo","jogos","arbitro"],
     "nav-search": ["search","jogador"],
@@ -2175,6 +2178,141 @@ function irEstatistica(fi, sel){
   abrirCard(fi, key, label, rxH[key], rxA[key], dec, sufixo);
 }
 
+/* Card-gráfico: as barras jogo a jogo dos dois times numa arte postável */
+function abrirCardGrafico(fi, key, label, dec, sufixo){
+  const fx = FIXTURES[fi];
+  const sel = STAT_SEL[key]; if (!sel) return;
+  const serie = (tid, nome, cor) => {
+    const js = [...getJogosRx(tid, fx.ligaId, state.rxJanela, state.rxEscopo, null)].reverse();
+    const pts = js.map(j => ({ v: sel(j), adv: j.advNome || "", ts: j.ts || "" })).filter(p => p.v != null);
+    if (!pts.length) return null;
+    return { nome, cor, pts, media: pts.reduce((a2,p)=>a2+p.v,0)/pts.length };
+  };
+  const s1 = serie(fx.homeId, fx.home, "#2FD08A"), s2 = serie(fx.awayId, fx.away, "#F0B14A");
+  if (!s1 && !s2) return;
+  const ehContinental = ehContinentalLiga(fx.ligaId);
+  let contexto = `últimos ${Math.max(s1?.pts.length||0, s2?.pts.length||0)} jogos`;
+  if (state.rxEscopo === "comp") contexto += ehContinental ? " · copas continentais" : ` · ${fx.competicao}`;
+  state.card = { tipo: "grafico", formato: "sticker", fx, key, label, dec, sufixo,
+                 contexto, series: [s1, s2].filter(Boolean) };
+  montarCardModal();
+}
+
+async function desenharGrafico(){
+  const c = state.card;
+  const UI = "-apple-system, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif";
+  const MONO = "'SF Mono', 'Roboto Mono', Menlo, monospace";
+  const W = 1080, cx = W / 2;
+  const chartH = 200, blocoH = 46 + chartH + 64;
+  const oHeader = 88, oSub = 166, oCtx = 206, g0 = 252;
+  const oFooter = g0 + c.series.length * blocoH + 4, panelH = oFooter + 44;
+
+  const sticker = c.formato === "sticker";
+  const H = sticker ? panelH + 48 : (c.formato === "story" ? 1920 : 1350);
+  const cv = document.getElementById("cardCanvas");
+  if (!cv) return;
+  cv.width = W; cv.height = H;
+  const x = cv.getContext("2d");
+  x.clearRect(0, 0, W, H);
+
+  if (!sticker){
+    const g = x.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#0D1712"); g.addColorStop(0.5, "#0A0F0C"); g.addColorStop(1, "#07100B");
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+    const glow = x.createRadialGradient(W/2, H*0.3, 60, W/2, H*0.3, W*0.8);
+    glow.addColorStop(0, "rgba(47,208,138,0.12)"); glow.addColorStop(1, "rgba(47,208,138,0)");
+    x.fillStyle = glow; x.fillRect(0, 0, W, H);
+  }
+
+  const px = 24, pw = W - 48;
+  const py = sticker ? 24 : Math.max(24, Math.round((H - panelH) / 2));
+  x.fillStyle = "rgba(8,13,10,0.92)";
+  x.beginPath(); x.roundRect(px, py, pw, panelH, 44); x.fill();
+  x.strokeStyle = "rgba(47,208,138,0.4)"; x.lineWidth = 3;
+  x.beginPath(); x.roundRect(px, py, pw, panelH, 44); x.stroke();
+  const Y = o => py + o;
+  x.textAlign = "center"; x.textBaseline = "middle";
+
+  // header: escudos + nomes
+  const [imH, imA] = await Promise.all([
+    carregaImg(SC_ASSETS.escudos?.[c.fx.home]), carregaImg(SC_ASSETS.escudos?.[c.fx.away]),
+  ]);
+  {
+    const yT = Y(oHeader);
+    x.font = `800 40px ${UI}`;
+    const nHW = x.measureText(c.fx.home).width, nAW = x.measureText(c.fx.away).width;
+    const cr = 64, gap = 14, meio = 56;
+    let cur = cx - (cr + gap + nHW + meio + nAW + gap + cr) / 2;
+    const crest = (img, nome, x0) => {
+      x.save(); x.beginPath(); x.roundRect(x0, yT - cr/2, cr, cr, 15); x.clip();
+      if (img) x.drawImage(img, x0, yT - cr/2, cr, cr);
+      else { x.fillStyle = "#1E2A23"; x.fillRect(x0, yT - cr/2, cr, cr); }
+      x.restore();
+    };
+    crest(imH, c.fx.home, cur); cur += cr + gap;
+    x.textAlign = "left"; x.font = `800 40px ${UI}`; x.fillStyle = "#EAF2EC";
+    x.fillText(c.fx.home, cur, yT); cur += nHW;
+    x.textAlign = "center"; x.fillStyle = "#64756B"; x.font = `600 32px ${UI}`;
+    x.fillText("×", cur + meio/2, yT); cur += meio;
+    x.textAlign = "left"; x.fillStyle = "#EAF2EC"; x.font = `800 40px ${UI}`;
+    x.fillText(c.fx.away, cur, yT); cur += nAW + gap;
+    crest(imA, c.fx.away, cur);
+    x.textAlign = "center";
+  }
+  x.font = `700 26px ${MONO}`; x.fillStyle = "#2FD08A";
+  x.fillText(`${c.label.toUpperCase()} · JOGO A JOGO`, cx, Y(oSub));
+  x.font = `500 22px ${MONO}`; x.fillStyle = "#93A399";
+  x.fillText(c.contexto, cx, Y(oCtx));
+
+  // um bloco de gráfico por time
+  c.series.forEach((s, idx) => {
+    const yB = Y(g0 + idx * blocoH);
+    const ax0 = px + 44, aw = pw - 88;
+    x.textAlign = "left"; x.font = `800 30px ${UI}`; x.fillStyle = s.cor;
+    x.fillText(s.nome, ax0, yB + 10);
+    const top = yB + 44, bottom = top + chartH - 56;
+    const n = s.pts.length, slot = aw / n, barW = Math.min(56, slot * 0.62);
+    const vals = s.pts.map(p => p.v), max = Math.max(...vals, 0.001);
+    // linha da média
+    const yMed = bottom - (s.media / max) * (bottom - top - 26);
+    x.setLineDash([7, 7]); x.strokeStyle = "rgba(255,255,255,0.4)"; x.lineWidth = 2;
+    x.beginPath(); x.moveTo(ax0, yMed); x.lineTo(ax0 + aw, yMed); x.stroke();
+    x.setLineDash([]);
+    x.textAlign = "right"; x.font = `600 18px ${MONO}`; x.fillStyle = "#93A399";
+    x.fillText(`média ${fmt(s.media, c.dec)}`, ax0 + aw, yMed - 15);
+    // barras
+    s.pts.forEach((p, i) => {
+      const bx = ax0 + slot * i + slot / 2;
+      const zero = !p.v;
+      const bh = Math.max(8, (p.v / max) * (bottom - top - 26));
+      const by = bottom - bh;
+      x.fillStyle = zero ? "rgba(255,255,255,0.10)" : s.cor;
+      x.beginPath(); x.roundRect(bx - barW/2, by, barW, bh, 6); x.fill();
+      x.textAlign = "center"; x.font = `800 24px ${UI}`;
+      x.fillStyle = zero ? "#64756B" : s.cor;
+      x.fillText(String(Number.isInteger(p.v) ? p.v : fmt(p.v, c.dec)) + (c.sufixo || ""), bx, by - 17);
+      let adv = p.adv;
+      x.font = `500 16px ${MONO}`;
+      while (x.measureText(adv).width > slot - 8 && adv.length > 4) adv = adv.slice(0, -1);
+      x.fillStyle = "#93A399";
+      x.fillText(adv === p.adv ? adv : adv + "…", bx, bottom + 20);
+      x.fillStyle = "#64756B"; x.font = `500 15px ${MONO}`;
+      x.fillText(p.ts.slice(5).split("-").reverse().join("/"), bx, bottom + 42);
+    });
+    x.textAlign = "center";
+  });
+
+  // rodapé
+  const yRod = Y(oFooter);
+  x.textAlign = "right"; x.font = `800 26px ${UI}`;
+  const wEx = x.measureText("!").width;
+  x.fillStyle = "#2FD08A"; x.fillText("!", px+pw-40, yRod);
+  x.fillStyle = "#FFFFFF"; x.fillText("APITOU", px+pw-40-wEx, yRod);
+  x.textAlign = "left"; x.font = `500 22px ${MONO}`; x.fillStyle = "#93A399";
+  x.fillText("os números falam · jogo a jogo", px+40, yRod);
+  x.textAlign = "center";
+}
+
 /* Card do modo clube único: uma estatística do clube no recorte de mando */
 function abrirCardSolo(fi, key){
   const fx = FIXTURES[fi];
@@ -2421,6 +2559,7 @@ async function desenharCard(){
   if (c.tipo === "jogador") return desenharJogador();
   if (c.tipo === "arbitro") return desenharArbitro();
   if (c.tipo === "timeSolo") return desenharTimeSolo();
+  if (c.tipo === "grafico") return desenharGrafico();
   if (c.formato === "sticker") return desenharSticker();
   const W = 1080, H = c.formato === "story" ? 1920 : 1350;
   const cv = document.getElementById("cardCanvas");
@@ -3667,6 +3806,7 @@ function renderJogos(){
 
 function setRxJanela(n){ state.rxJanela = n; render(); }
 function setRxMando(m){ state.rxMando = m; render(); }
+function setRxChart(k){ state.rxChart = state.rxChart === k ? null : k; render(); }
 
 /* Mobile: tocar numa barrinha do sparkline mostra o balão (valor × adversário)
    SEM disparar o card da linha; tocar no resto da linha gera o card normalmente.
@@ -4256,18 +4396,61 @@ function renderJogo(){
         if (pct <= 30) return `<span class="mchip" data-tip="matchup frio: ${advNome} cede só ${fmt(v)} ${NOME_DVP[stat]}/jogo — menos que ${100-pct}% dos times">${svgIco("floco")}</span>`;
         return "";
       };
+      // gráfico expansível da estatística (estilo perfil do jogador): os dois times, jogo a jogo
+      const chartPanel = (key, label, a, b, dec, sufixo) => {
+        if (state.rxChart !== key) return "";
+        const sel = STAT_SEL[key]; if (!sel) return "";
+        const bloco = (tid, nome, cor) => {
+          const js = [...getJogosRx(tid, fx.ligaId, state.rxJanela, state.rxEscopo, null)].reverse();
+          const vals = js.map(j => { const v = sel(j); return v == null ? null : v; });
+          const nums = vals.filter(v => v != null);
+          if (!nums.length) return "";
+          const max = Math.max(...nums, 0.001);
+          const media = nums.reduce((x,y)=>x+y,0) / nums.length;
+          const chartH = 105, rodape = 34;
+          return `<div style="margin:12px 0 2px; font-weight:800; font-size:12.5px; color:${cor}">${nome}</div>
+            <div style="position:relative">
+              <div style="position:absolute; left:0; right:0; bottom:${rodape + media/max*chartH}px; border-top:1.5px dashed rgba(255,255,255,0.35); pointer-events:none; z-index:2"></div>
+              <div class="tnum" style="position:absolute; right:2px; bottom:${rodape + media/max*chartH + 3}px; font-size:10px; color:var(--txt3); z-index:2; pointer-events:none">média ${fmt(media)}</div>
+              <div style="display:flex; align-items:flex-end; gap:5px; height:${chartH + rodape + 18}px">
+              ${js.map((j, i) => { const v = vals[i]; const zero = !v; const h = v == null ? 4 : Math.max(6, v/max*chartH);
+                return `<div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%">
+                  <div class="tnum" style="font-size:11px; font-weight:800; color:${zero ? "var(--txt3)" : cor}">${v == null ? "–" : v}</div>
+                  <div style="width:100%; max-width:40px; height:${h}px; border-radius:4px 4px 0 0; background:${zero ? "rgba(255,255,255,0.10)" : cor}; margin-top:2px"></div>
+                  <div style="height:${rodape}px; display:flex; flex-direction:column; align-items:center; padding-top:4px; width:100%">
+                    <span style="font-size:9px; color:var(--txt3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%">${j.advNome || ""}</span>
+                    <span class="tnum" style="font-size:9px; color:var(--txt3)">${(j.ts || "").slice(5).split("-").reverse().join("/")}</span>
+                  </div></div>`; }).join("")}
+              </div></div>`;
+        };
+        return `<div style="padding:2px 2px 14px; border-bottom:1px solid rgba(255,255,255,0.05)">
+          <div style="margin-top:12px; font-weight:800; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--txt3); display:flex; align-items:center; gap:8px">${svgIco("grafico")} ${label} · jogo a jogo</div>
+          ${bloco(fx.homeId, fx.home, "var(--acc)")}${bloco(fx.awayId, fx.away, "#F0B14A")}
+          <div style="display:flex; gap:10px; margin-top:14px; flex-wrap:wrap">
+            <button class="h2h-cardbtn" style="flex:1; min-width:180px; margin:0" onclick="abrirCardGrafico(${fi}, '${key}', '${escapeHtml(label)}', ${dec}, '${sufixo}')">
+              ${svgIco("grafico")} Gerar card · gráfico
+            </button>
+            <button class="h2h-cardbtn" style="flex:1; min-width:180px; margin:0" onclick="abrirCard(${fi}, '${key}', '${escapeHtml(label)}', ${a}, ${b}, ${dec}, '${sufixo}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4M8 11l4 4 4-4M12 15V3"/></svg>
+              Gerar card · números
+            </button>
+          </div>
+        </div>`;
+      };
+      // toque na LINHA = abre/fecha o gráfico jogo a jogo; a setinha = gera o card
       const linha = (key, label, a, b, dec=1, sufixo="", bH="", bA="") => {
         if (a == null || b == null) return "";
         const max = Math.max(a, b, 0.001);
-        return `<div class="rx-row rx-click" title="Gerar card pra postar" onclick="abrirCard(${fi}, '${key}', '${escapeHtml(label)}', ${a}, ${b}, ${dec}, '${sufixo}')">
+        const aberto = state.rxChart === key;
+        return `<div class="rx-row rx-click ${aberto ? "rx-open" : ""}" title="Ver jogo a jogo" onclick="setRxChart('${key}')">
           <div class="rx-side"><span class="rx-val tnum">${fmt(a,dec)}${sufixo}</span>${bH}<div class="rx-bar"><div class="rx-fill home" style="width:${a/max*100}%"></div></div></div>
-          <div class="rx-label">${label} <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.55; vertical-align:-1px"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg></div>
+          <div class="rx-label">${label} <span class="card-tgl" title="Gerar card pra postar" onclick="event.stopPropagation(); abrirCard(${fi}, '${key}', '${escapeHtml(label)}', ${a}, ${b}, ${dec}, '${sufixo}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg></span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5; margin-left:5px; transform:rotate(${aberto ? 180 : 0}deg); transition:transform .15s"><path d="M6 9l6 6 6-6"/></svg></div>
           <div class="rx-side away"><div class="rx-bar"><div class="rx-fill away" style="width:${b/max*100}%"></div></div>${bA}<span class="rx-val tnum">${fmt(b,dec)}${sufixo}</span></div>
-        </div>`;
+        </div>${chartPanel(key, label, a, b, dec, sufixo)}`;
       };
       const grupo = (titulo, linhas) => linhas.trim() ? `<div class="rx-group"><div class="rx-group-t">${titulo}</div>${linhas}</div>` : "";
       corpo = `
-        <div class="rx-sample">amostra: ${rxH.jogos} jogo${rxH.jogos===1?"":"s"} do ${fx.home} · ${rxA.jogos} jogo${rxA.jogos===1?"":"s"} do ${fx.away}${state.rxEscopo==="comp" ? (ehContinental ? " em copas continentais" : ` (só ${fx.competicao})`) : ""}${(rxH.jogos < state.rxJanela || rxA.jogos < state.rxJanela) ? " (todos os disponíveis)" : ""}${(rxH.inclui2025 || rxA.inclui2025) ? " · inclui temporada 2025" : ""}</div>
+        <div class="rx-sample">amostra: ${rxH.jogos} jogo${rxH.jogos===1?"":"s"} do ${fx.home} · ${rxA.jogos} jogo${rxA.jogos===1?"":"s"} do ${fx.away}${state.rxEscopo==="comp" ? (ehContinental ? " em copas continentais" : ` (só ${fx.competicao})`) : ""}${(rxH.jogos < state.rxJanela || rxA.jogos < state.rxJanela) ? " (todos os disponíveis)" : ""}${(rxH.inclui2025 || rxA.inclui2025) ? " · inclui temporada 2025" : ""} · toque numa estatística pra abrir o jogo a jogo</div>
         ${grupo("Ataque",
           linha("gols", "Gols marcados", rxH.gols, rxA.gols, 1, "", badge("gols","golsSof",rxA,fx.away), badge("gols","golsSof",rxH,fx.home)) +
           linha("fin", "Finalizações", rxH.fin, rxA.fin, 1, "", badge("fin","finSof",rxA,fx.away), badge("fin","finSof",rxH,fx.home)) +
