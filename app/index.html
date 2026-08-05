@@ -2900,8 +2900,8 @@ async function desenharJogador(){
   const W = 1080, cx = W / 2;
   const n = c.hist.length;
 
-  const oHeader = 92, oSub = 220, oNum = 352, oLbl = 428, oBoxLbl = 500, oBoxes = 552;
-  const ex0 = 640, exStep = 46;
+  const oHeader = 92, oSub = 220, oNum = 352, oLbl = 428, oMed2 = 486, oBoxLbl = 556, oBoxes = 608;
+  const ex0 = 696, exStep = 46;
   const oFooter = ex0 + n * exStep + 16, panelH = oFooter + 42;
 
   const sticker = c.formato === "sticker";
@@ -2961,6 +2961,30 @@ async function desenharJogador(){
   x.font = `700 22px ${MONO}`; x.fillStyle = "#93A399";
   x.fillText("FINALIZAÇÕES", cx - off, Y(oLbl));
   x.fillText("CHUTES A GOL", cx + off, Y(oLbl));
+
+  // faixa de médias secundárias: desarmes · passes · faltas sofridas · minutos
+  {
+    const yM = Y(oMed2);
+    const seg = [];
+    if (c.medDs != null) seg.push([fmt(c.medDs), " desarmes"]);
+    if (c.medPs != null) seg.push([fmt(c.medPs, 0), " passes"]);
+    if (c.medFs != null) seg.push([fmt(c.medFs), " faltas sofridas"]);
+    if (c.medMin != null) seg.push([c.medMin + "'", " em campo"]);
+    if (seg.length){
+      x.font = `800 28px ${UI}`; const wV = seg.map(s => x.measureText(s[0]).width);
+      x.font = `500 24px ${UI}`; const wL = seg.map(s => x.measureText(s[1]).width);
+      const sep = "   ·   ", sepW = x.measureText(sep).width;
+      const total = wV.reduce((a,b)=>a+b,0) + wL.reduce((a,b)=>a+b,0) + sepW * (seg.length - 1);
+      let cur = cx - total / 2;
+      x.textAlign = "left";
+      seg.forEach((s, i) => {
+        x.font = `800 28px ${UI}`; x.fillStyle = "#EAF2EC"; x.fillText(s[0], cur, yM); cur += wV[i];
+        x.font = `500 24px ${UI}`; x.fillStyle = "#93A399"; x.fillText(s[1], cur, yM); cur += wL[i];
+        if (i < seg.length - 1){ x.font = `500 24px ${UI}`; x.fillStyle = "#64756B"; x.fillText(sep, cur, yM); cur += sepW; }
+      });
+      x.textAlign = "center";
+    }
+  }
 
   // caixinhas (finalizações, mais antigo → mais recente)
   x.font = `500 22px ${MONO}`; x.fillStyle = "#64756B";
@@ -3392,10 +3416,13 @@ function abrirCardJogador(){
   if (!hist.length) return;
   const ehContinental = ehContinentalLiga(fx.ligaId);
   const escLabel = escopo === "comp" ? (ehContinental ? "copas continentais" : fx.competicao) : "todas as competições";
+  const med2 = sel => { const v = hist.map(sel).filter(x => x != null); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null; };
   state.card = { tipo: "jogador", formato: "sticker", label: "forma",
     nome: j.name, time: tname, pos: j.pos || "",
     fx, contexto: `últimos ${hist.length} jogos · ${escLabel}`,
     medF: hist.reduce((a,g)=>a+g.f,0)/hist.length, medO: hist.reduce((a,g)=>a+g.o,0)/hist.length,
+    medDs: med2(g => g.ds), medPs: med2(g => g.ps),
+    medFs: med2(g => g.fs), medMin: (m => m != null ? Math.round(m) : null)(med2(g => g.m)),
     hist };
   montarCardModal();
 }
