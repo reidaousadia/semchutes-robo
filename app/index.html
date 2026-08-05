@@ -1531,7 +1531,7 @@ function go(view, playerId, qiFixture, qiPlayer, jogoIdx){
   if (qiPlayer != null) state.qiPlayer = qiPlayer;
   if (jogoIdx != null) { state.jogoAberto = jogoIdx; state.elencoAberto = {};
     // ao abrir um jogo: aba Números · Últimos 10 · só a competição do jogo
-    state.jogoTab = "stats"; state.rxEscopo = "comp"; state.rxJanela = 10; state.h2hSub = "ult"; state.rxMando = "todos"; }
+    state.jogoTab = "stats"; state.rxEscopo = "geral"; state.rxJanela = 10; state.h2hSub = "ult"; state.rxMando = "todos"; }
   const navMap = {
     "nav-oportunidades": ["oportunidades","jogo","jogos","arbitro"],
     "nav-search": ["search","jogador"],
@@ -3404,7 +3404,7 @@ function setRxMando(m){ state.rxMando = m; render(); }
 function setJogoTab(t){
   // cada aba abre no escopo natural: Números = só a competição do jogo;
   // Confronto/Quentes = todos os jogos (retrato completo)
-  if ((state.jogoTab || "stats") !== t) state.rxEscopo = t === "stats" ? "comp" : "geral";
+  if ((state.jogoTab || "stats") !== t) state.rxEscopo = "geral";
   state.jogoTab = t;
   render();
 }
