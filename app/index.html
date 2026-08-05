@@ -2906,8 +2906,12 @@ async function desenharJogador(){
   const W = 1080, cx = W / 2;
   const n = c.hist.length;
 
-  const oHeader = 92, oSub = 220, oNum = 352, oLbl = 428, oMed2 = 486, oBoxLbl = 556, oBoxes = 608;
-  const ex0 = 696, exStep = 46;
+  // card por mercado (statMode) é monotemático: sem faixa de médias gerais, layout mais curto
+  const statMode = c.statKey && c.statKey !== "f";
+  const selB = statMode ? (g => g[c.statKey] ?? 0) : (g => g.f);
+  const oHeader = 92, oSub = 220, oNum = 352, oLbl = 428, oMed2 = 486;
+  const oBoxLbl = statMode ? 500 : 556, oBoxes = statMode ? 552 : 608;
+  const ex0 = statMode ? 640 : 696, exStep = 46;
   const oFooter = ex0 + n * exStep + 16, panelH = oFooter + 42;
 
   const sticker = c.formato === "sticker";
@@ -2960,8 +2964,6 @@ async function desenharJogador(){
   x.fillText("FORMA RECENTE · POR JOGO", cx, Y(oSub));
 
   // números grandes: padrão = finalizações + chutes a gol; com statKey = a estatística escolhida
-  const statMode = c.statKey && c.statKey !== "f";
-  const selB = statMode ? (g => g[c.statKey] ?? 0) : (g => g.f);
   if (statMode){
     x.font = `800 120px ${UI}`; x.fillStyle = "#F0B14A";
     x.fillText((c.statDec === 0 ? String(Math.round(c.statMed)) : fmt(c.statMed)) + (c.statKey === "m" ? "'" : ""), cx, Y(oNum));
@@ -2977,8 +2979,8 @@ async function desenharJogador(){
     x.fillText("CHUTES A GOL", cx + off, Y(oLbl));
   }
 
-  // faixa de médias secundárias: desarmes · passes · faltas sofridas · minutos
-  {
+  // faixa de médias secundárias — só no card GERAL (finalizações); card de mercado é monotemático
+  if (!statMode){
     const yM = Y(oMed2);
     const seg = [];
     if (c.medDs != null) seg.push([fmt(c.medDs), " desarmes"]);
