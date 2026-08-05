@@ -2096,21 +2096,17 @@ function enviarLead(ev){
 /* ---------- GERADOR DE CARD (branding/divulgação — Instagram) ---------- */
 function abrirCard(fi, key, label, a, b, dec, sufixo){
   const fx = FIXTURES[fi];
-  const _mv = state.rxMando === "casa" ? true : state.rxMando === "fora" ? false : null;
-  const _mH = _mv, _mA = _mv;
-  const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo, _mH);
-  const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo, _mA);
+  // cards nascem da visão "Todos" (o modo clube único não tem linha clicável)
+  const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo, null);
+  const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo, null);
   const ehContinental = ehContinentalLiga(fx.ligaId);
   let contexto = `média dos últimos ${Math.max(rxH?.jogos||0, rxA?.jogos||0)} jogos`;
   if (state.rxEscopo === "comp") contexto += ehContinental ? " · copas continentais" : ` · ${fx.competicao}`;
   if (rxH?.inclui2025 || rxA?.inclui2025) contexto += " · inclui temporada 2025";
-  if (state.rxMando === "casa") contexto += " · só jogos em casa";
-  else if (state.rxMando === "fora") contexto += " · só jogos fora de casa";
   // extrato jogo a jogo da estatística clicada (pro card detalhado)
   const sel = STAT_SEL[key];
-  const mandoDe = tid => (state.rxMando === "casa" ? true : state.rxMando === "fora" ? false : null);
   const extrato = tid => sel
-    ? getJogosRx(tid, fx.ligaId, state.rxJanela, state.rxEscopo, mandoDe(tid))
+    ? getJogosRx(tid, fx.ligaId, state.rxJanela, state.rxEscopo, null)
         .map(j => ({ v: sel(j), adv: j.advNome || j.ts?.slice(5).split("-").reverse().join("/") || "?" }))
         .filter(e => e.v != null)
     : [];
@@ -3877,7 +3873,7 @@ function renderJogo(){
   const mandoSel = state.rxMando || "todos";
   const chipM = (m, txt) => `<button class="chip ${mandoSel===m?'on':''}" onclick="setRxMando('${m}')">${txt}</button>`;
   const grupoMando = temMando ? `<div class="qlabel">Mando de campo?</div>
-    <div class="filters">${chipM("todos", "Todos")}${chipM("casa", "Em casa")}${chipM("fora", "Fora de casa")}</div>` : "";
+    <div class="filters">${chipM("todos", "Todos")}${chipM("casaH", `${fx.home} · casa`)}${chipM("foraA", `${fx.away} · fora`)}</div>` : "";
   const filtrosRow = tab === "esc" ? "" : `<div class="jogo-filtros">${tab === "stats" ? grupoJanela : ""}${grupoEscopo}${tab === "stats" ? grupoMando : ""}</div>`;
 
   const teamsHead = `
@@ -3896,11 +3892,40 @@ function renderJogo(){
   } else if (tab === "esc"){
     corpo = escalacoesCorpo(fx, fi);
   } else {
-    // filtro simétrico: "Em casa" = jogos em casa DOS DOIS times; "Fora" = fora dos dois
-    const mv = mandoSel === "casa" ? true : mandoSel === "fora" ? false : null;
-    const mandoH = mv, mandoA = mv;
-    const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo, mandoH);
-    const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo, mandoA);
+    // mando estilo FlashScore: Todos | {mandante} · casa | {visitante} · fora
+    // modo clube único: só os números DAQUELE clube, comparados com a média geral dele
+    const solo = mandoSel === "casaH" ? "H" : mandoSel === "foraA" ? "A" : null;
+    if (solo){
+      const tidS = solo === "H" ? fx.homeId : fx.awayId;
+      const nomeS = solo === "H" ? fx.home : fx.away;
+      const emCasa = solo === "H";
+      const rot = emCasa ? "em casa" : "fora de casa";
+      const rxSel = computeRx(tidS, fx.ligaId, state.rxJanela, state.rxEscopo, emCasa);
+      const rxGer = computeRx(tidS, fx.ligaId, state.rxJanela, state.rxEscopo, null);
+      if (rxSel && rxSel.jogos){
+        const linhaS = (key, label, a, b, dec=1, sufixo="") => {
+          if (a == null || b == null) return "";
+          const max = Math.max(a, b, 0.001);
+          return `<div class="rx-row">
+            <div class="rx-side"><span class="rx-val tnum">${fmt(a,dec)}${sufixo}</span><div class="rx-bar"><div class="rx-fill ${emCasa ? "home" : "away"}" style="width:${a/max*100}%"></div></div></div>
+            <div class="rx-label">${label}</div>
+            <div class="rx-side away"><div class="rx-bar"><div class="rx-fill" style="width:${b/max*100}%; background:#64756B"></div></div><span class="rx-val tnum" style="color:var(--txt3)">${fmt(b,dec)}${sufixo}</span></div>
+          </div>`;
+        };
+        const grupoS = (titulo, linhas) => linhas.trim() ? `<div class="rx-group"><div class="rx-group-t">${titulo}</div>${linhas}</div>` : "";
+        corpo = `
+          <div class="rx-sample" style="margin-bottom:2px"><b style="color:var(--txt)">${nomeS} ${rot}</b> (colorido) × média geral do ${nomeS} (cinza)</div>
+          <div class="rx-sample">amostra: ${rxSel.jogos} jogo${rxSel.jogos===1?"":"s"} ${rot} · referência: ${rxGer.jogos} jogo${rxGer.jogos===1?"":"s"} no total${rxSel.inclui2025 ? " · inclui temporada 2025" : ""}</div>
+          ${grupoS("Ataque", linhaS("gols", "Gols marcados", rxSel.gols, rxGer.gols) + linhaS("fin", "Finalizações", rxSel.fin, rxGer.fin) + linhaS("chutesGol", "Chutes a gol", rxSel.chutesGol, rxGer.chutesGol) + linhaS("cantos", "Escanteios", rxSel.cantos, rxGer.cantos))}
+          ${grupoS("Defesa", linhaS("golsSof", "Gols sofridos", rxSel.golsSof, rxGer.golsSof) + linhaS("finSof", "Finalizações sofridas", rxSel.finSof, rxGer.finSof) + linhaS("cantosSof", "Escanteios cedidos", rxSel.cantosSof, rxGer.cantosSof) + linhaS("defesas", "Defesas de goleiro", rxSel.defesas, rxGer.defesas))}
+          ${grupoS("Disciplina", linhaS("faltas", "Faltas cometidas", rxSel.faltas, rxGer.faltas) + linhaS("amarelos", "Cartões amarelos", rxSel.amarelos, rxGer.amarelos) + linhaS("vermelhos", "Cartões vermelhos", rxSel.vermelhos, rxGer.vermelhos, 2))}
+          ${grupoS("Controle", linhaS("posse", "Posse de bola", rxSel.posse, rxGer.posse, 0, "%") + linhaS("laterais", "Arremessos laterais", rxSel.laterais, rxGer.laterais) + linhaS("tiroMeta", "Tiros de meta", rxSel.tiroMeta, rxGer.tiroMeta))}`;
+      } else {
+        corpo = `<div class="empty-box" style="margin-top:6px">O ${nomeS} ainda não tem jogos ${rot} na amostra atual — aumente a janela ou volte pra "Todos".</div>`;
+      }
+    } else {
+    const rxH = computeRx(fx.homeId, fx.ligaId, state.rxJanela, state.rxEscopo, null);
+    const rxA = computeRx(fx.awayId, fx.ligaId, state.rxJanela, state.rxEscopo, null);
     if (rxH && rxA){
       const linha = (key, label, a, b, dec=1, sufixo="") => {
         if (a == null || b == null) return "";
@@ -3913,13 +3938,14 @@ function renderJogo(){
       };
       const grupo = (titulo, linhas) => linhas.trim() ? `<div class="rx-group"><div class="rx-group-t">${titulo}</div>${linhas}</div>` : "";
       corpo = `
-        <div class="rx-sample">amostra: ${rxH.jogos} jogo${rxH.jogos===1?"":"s"} do ${fx.home} · ${rxA.jogos} jogo${rxA.jogos===1?"":"s"} do ${fx.away}${state.rxEscopo==="comp" ? (ehContinental ? " em copas continentais" : ` (só ${fx.competicao})`) : ""}${(rxH.jogos < state.rxJanela || rxA.jogos < state.rxJanela) ? " (todos os disponíveis)" : ""}${(rxH.inclui2025 || rxA.inclui2025) ? " · inclui temporada 2025" : ""}${mandoSel === "casa" ? " · só jogos EM CASA dos dois times" : mandoSel === "fora" ? " · só jogos FORA DE CASA dos dois times" : ""}</div>
+        <div class="rx-sample">amostra: ${rxH.jogos} jogo${rxH.jogos===1?"":"s"} do ${fx.home} · ${rxA.jogos} jogo${rxA.jogos===1?"":"s"} do ${fx.away}${state.rxEscopo==="comp" ? (ehContinental ? " em copas continentais" : ` (só ${fx.competicao})`) : ""}${(rxH.jogos < state.rxJanela || rxA.jogos < state.rxJanela) ? " (todos os disponíveis)" : ""}${(rxH.inclui2025 || rxA.inclui2025) ? " · inclui temporada 2025" : ""}</div>
         ${grupo("Ataque", linha("gols", "Gols marcados", rxH.gols, rxA.gols) + linha("fin", "Finalizações", rxH.fin, rxA.fin) + linha("chutesGol", "Chutes a gol", rxH.chutesGol, rxA.chutesGol) + linha("cantos", "Escanteios", rxH.cantos, rxA.cantos))}
         ${grupo("Defesa", linha("golsSof", "Gols sofridos", rxH.golsSof, rxA.golsSof) + linha("finSof", "Finalizações sofridas", rxH.finSof, rxA.finSof) + linha("cantosSof", "Escanteios cedidos", rxH.cantosSof, rxA.cantosSof) + linha("defesas", "Defesas de goleiro", rxH.defesas, rxA.defesas))}
         ${grupo("Disciplina", linha("faltas", "Faltas cometidas", rxH.faltas, rxA.faltas) + linha("amarelos", "Cartões amarelos", rxH.amarelos, rxA.amarelos) + linha("vermelhos", "Cartões vermelhos", rxH.vermelhos, rxA.vermelhos, 2))}
         ${grupo("Controle", linha("posse", "Posse de bola", rxH.posse, rxA.posse, 0, "%") + linha("laterais", "Arremessos laterais", rxH.laterais, rxA.laterais) + linha("tiroMeta", "Tiros de meta", rxH.tiroMeta, rxA.tiroMeta))}`;
     } else {
       corpo = `<div class="empty-box" style="margin-top:6px">Um dos times ainda não tem jogos suficientes ${state.rxEscopo==="comp" ? (ehContinental ? "em copas continentais" : `no ${fx.competicao}`) : ""} pra calcular médias — em "Quais jogos?", troque pra "Todos os jogos".</div>`;
+    }
     }
   }
 
