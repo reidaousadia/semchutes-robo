@@ -2178,6 +2178,30 @@ function irEstatistica(fi, sel){
   abrirCard(fi, key, label, rxH[key], rxA[key], dec, sufixo);
 }
 
+/* Card-gráfico do JOGADOR: as barras jogo a jogo dele, com foto no topo */
+function abrirCardGraficoJogador(statKey){
+  const { fi, side, idx } = state.j2 || {};
+  const fx = FIXTURES[fi]; if (!fx) return;
+  const tid = side === "home" ? fx.homeId : fx.awayId;
+  const tname = side === "home" ? fx.home : fx.away;
+  const j = (ELENCOS[String(tid)] || [])[idx]; if (!j) return;
+  const janela = state.jgJanela || 10, escopo = state.jgEscopo || "geral";
+  const hist = getHistJogador(tid, j.name, janela, escopo, fx.ligaId);
+  if (!hist.length) return;
+  const key = PJ_CARD_META[statKey] ? statKey : "f";
+  const meta = PJ_CARD_META[key];
+  const pts = [...hist].reverse().map(g => ({ v: g[key], adv: g.a || "", ts: g.t || "" })).filter(p => p.v != null);
+  if (!pts.length) return;
+  const ehContinental = ehContinentalLiga(fx.ligaId);
+  const escLabel = escopo === "comp" ? (ehContinental ? "copas continentais" : fx.competicao) : "todas as competições";
+  state.card = { tipo: "grafico", formato: "sticker", fx,
+                 jog: { nome: j.name, time: tname, pos: j.pos || "" },
+                 label: meta[0], dec: meta[1], sufixo: key === "m" ? "'" : "",
+                 contexto: `últimos ${pts.length} jogos · ${escLabel}`,
+                 series: [{ nome: j.name, cor: "#F0B14A", pts, media: pts.reduce((a,p)=>a+p.v,0)/pts.length }] };
+  montarCardModal();
+}
+
 /* Card-gráfico: as barras jogo a jogo dos dois times numa arte postável */
 function abrirCardGrafico(fi, key, label, dec, sufixo){
   const fx = FIXTURES[fi];
@@ -2204,7 +2228,8 @@ async function desenharGrafico(){
   const MONO = "'SF Mono', 'Roboto Mono', Menlo, monospace";
   const W = 1080, cx = W / 2;
   const chartH = 200, blocoH = 46 + chartH + 64;
-  const oHeader = 88, oSub = 166, oCtx = 206, g0 = 252;
+  // no card de jogador o header tem linha extra (time · posição): desce o resto
+  const oHeader = 88, oSub = c.jog ? 200 : 166, oCtx = c.jog ? 238 : 206, g0 = c.jog ? 282 : 252;
   const oFooter = g0 + c.series.length * blocoH + 4, panelH = oFooter + 44;
 
   const sticker = c.formato === "sticker";
@@ -2233,11 +2258,29 @@ async function desenharGrafico(){
   const Y = o => py + o;
   x.textAlign = "center"; x.textBaseline = "middle";
 
-  // header: escudos + nomes
-  const [imH, imA] = await Promise.all([
-    carregaImg(SC_ASSETS.escudos?.[c.fx.home]), carregaImg(SC_ASSETS.escudos?.[c.fx.away]),
-  ]);
-  {
+  // header: jogador (foto + nome) OU os dois times (escudos + nomes)
+  if (c.jog){
+    const foto = await carregaImg(window.SC_ASSETS?.fotos?.[c.jog.nome]);
+    const yT = Y(oHeader), sz = 76;
+    let size = 42;
+    while (size > 28){
+      x.font = `800 ${size}px ${UI}`;
+      if (x.measureText(c.jog.nome).width <= pw - 220) break;
+      size -= 2;
+    }
+    const nomeW = x.measureText(c.jog.nome).width;
+    let cur = cx - (sz + 18 + nomeW) / 2;
+    x.save(); x.beginPath(); x.roundRect(cur, yT - sz/2, sz, sz, 18); x.clip();
+    if (foto) x.drawImage(foto, cur, yT - sz/2, sz, sz);
+    else { x.fillStyle = "#1E2A23"; x.fillRect(cur, yT - sz/2, sz, sz); }
+    x.restore();
+    x.textAlign = "left"; x.fillStyle = "#EAF2EC"; x.fillText(c.jog.nome, cur + sz + 18, yT);
+    x.textAlign = "center"; x.font = `500 22px ${MONO}`; x.fillStyle = "#93A399";
+    x.fillText(`${c.jog.time}${c.jog.pos ? " · " + c.jog.pos : ""}`, cx, yT + sz/2 + 24);
+  } else {
+    const [imH, imA] = await Promise.all([
+      carregaImg(SC_ASSETS.escudos?.[c.fx.home]), carregaImg(SC_ASSETS.escudos?.[c.fx.away]),
+    ]);
     const yT = Y(oHeader);
     x.font = `800 40px ${UI}`;
     const nHW = x.measureText(c.fx.home).width, nAW = x.measureText(c.fx.away).width;
@@ -2268,8 +2311,10 @@ async function desenharGrafico(){
   c.series.forEach((s, idx) => {
     const yB = Y(g0 + idx * blocoH);
     const ax0 = px + 44, aw = pw - 88;
-    x.textAlign = "left"; x.font = `800 30px ${UI}`; x.fillStyle = s.cor;
-    x.fillText(s.nome, ax0, yB + 10);
+    if (!c.jog){ // no card de jogador o nome já está no topo
+      x.textAlign = "left"; x.font = `800 30px ${UI}`; x.fillStyle = s.cor;
+      x.fillText(s.nome, ax0, yB + 10);
+    }
     const top = yB + 44, bottom = top + chartH - 56;
     const n = s.pts.length, slot = aw / n, barW = Math.min(56, slot * 0.62);
     const vals = s.pts.map(p => p.v), max = Math.max(...vals, 0.001);
@@ -2278,8 +2323,6 @@ async function desenharGrafico(){
     x.setLineDash([7, 7]); x.strokeStyle = "rgba(255,255,255,0.4)"; x.lineWidth = 2;
     x.beginPath(); x.moveTo(ax0, yMed); x.lineTo(ax0 + aw, yMed); x.stroke();
     x.setLineDash([]);
-    x.textAlign = "right"; x.font = `600 18px ${MONO}`; x.fillStyle = "#93A399";
-    x.fillText(`média ${fmt(s.media, c.dec)}`, ax0 + aw, yMed - 15);
     // barras
     s.pts.forEach((p, i) => {
       const bx = ax0 + slot * i + slot / 2;
@@ -2299,6 +2342,14 @@ async function desenharGrafico(){
       x.fillStyle = "#64756B"; x.font = `500 15px ${MONO}`;
       x.fillText(p.ts.slice(5).split("-").reverse().join("/"), bx, bottom + 42);
     });
+    // rótulo da média por cima, com fundinho, ABAIXO da linha (não cobre valor de barra)
+    x.font = `600 18px ${MONO}`;
+    const mTxt = `média ${fmt(s.media, c.dec)}`;
+    const mW = x.measureText(mTxt).width;
+    x.fillStyle = "rgba(8,13,10,0.9)";
+    x.beginPath(); x.roundRect(ax0 + aw - mW - 14, yMed + 5, mW + 14, 24, 6); x.fill();
+    x.textAlign = "right"; x.fillStyle = "#93A399";
+    x.fillText(mTxt, ax0 + aw - 7, yMed + 17);
     x.textAlign = "center";
   });
 
@@ -3589,10 +3640,15 @@ function renderJogadorSimples(){
       <div class="rx-sample" style="margin-top:10px">amostra: ${hist.length} jogo${hist.length===1?"":"s"}${escopo==="comp" ? (ehContinental ? " em copas continentais" : ` (só ${fx.competicao})`) : ""} · caixinhas: da esquerda (mais antigo) pra direita (mais recente)</div>
       ${tabsStat}
       ${grafico}
-      <button class="h2h-cardbtn" style="margin-top:10px" onclick="abrirCardJogador('${statSel}')">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4M8 11l4 4 4-4M12 15V3"/></svg>
-        Gerar card · ${metaSel[1]}
-      </button>
+      <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap">
+        <button class="h2h-cardbtn" style="flex:1; min-width:180px; margin:0" onclick="abrirCardGraficoJogador('${statSel}')">
+          ${svgIco("grafico")} Gerar card · gráfico
+        </button>
+        <button class="h2h-cardbtn" style="flex:1; min-width:180px; margin:0" onclick="abrirCardJogador('${statSel}')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4M8 11l4 4 4-4M12 15V3"/></svg>
+          Gerar card · números
+        </button>
+      </div>
       <div class="tend-box" style="margin-top:14px">${tendencias}</div>
       <div class="section-h" style="margin-top:8px"><span class="lbl">Jogo a jogo</span><span class="count tnum">${hist.length} jogos</span></div>
       <div class="jg-list">${extrato}</div>`;
