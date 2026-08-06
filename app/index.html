@@ -2,6 +2,17 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiPjxnIHRyYW5zZm9ybT0icm90YXRlKDE2IDUwIDU1KSI+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTAwLDApIHNjYWxlKC0xLDEpIj48cmVjdCB4PSI0IiB5PSIzNiIgd2lkdGg9IjQ2IiBoZWlnaHQ9IjE3IiByeD0iOCIgZmlsbD0iIzJGRDA4QSIvPjxyZWN0IHg9IjM0IiB5PSIzNiIgd2lkdGg9IjMwIiBoZWlnaHQ9IjI2IiBmaWxsPSIjMkZEMDhBIi8+PGNpcmNsZSBjeD0iNjAiIGN5PSI2MSIgcj0iMjciIGZpbGw9IiMyRkQwOEEiLz48cmVjdCB4PSI0MiIgeT0iMzMiIHdpZHRoPSI4IiBoZWlnaHQ9IjEyIiByeD0iMyIgZmlsbD0iIzBBMEYwQyIvPjwvZz48Y2lyY2xlIGN4PSI0MCIgY3k9IjYzIiByPSIxNSIgZmlsbD0iIzBBMEYwQyIvPjxjaXJjbGUgY3g9IjQwIiBjeT0iNjMiIHI9IjExIiBmaWxsPSIjRjBCMTRBIi8+PC9nPjxwYXRoIGQ9Ik02MiAxNiBsLTIgMTEgTTczIDE0IGwtNSAxMSBNODMgMTcgbC04IDkiIHN0cm9rZT0iI0YwQjE0QSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48L3N2Zz4=">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0A0F0C">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Apitou!">
+<script>
+// base PWA (pré-requisito das lojas): registra o service worker em produção
+if ("serviceWorker" in navigator && location.protocol === "https:")
+  addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+</script>
 <style>
 @font-face {
   font-family: 'Barlow Condensed';
