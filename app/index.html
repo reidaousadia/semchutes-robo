@@ -2648,6 +2648,7 @@ function carregaImg(src){
   return new Promise(res => {
     if (!src) return res(null);
     const img = new Image();
+    img.crossOrigin = "anonymous"; // no app nativo as imagens vêm de apitou.com.br (outra origem): sem isso o canvas trava
     img.onload = () => res(img);
     img.onerror = () => res(null);
     img.src = src;

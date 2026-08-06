@@ -1,2 +1,8 @@
 /dados.js
   Cache-Control: no-cache
+
+# imagens proxied: liberadas pra canvas do app nativo (capacitor://localhost)
+/media/*
+  Access-Control-Allow-Origin: *
+/smimg/*
+  Access-Control-Allow-Origin: *
