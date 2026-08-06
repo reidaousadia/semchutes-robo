@@ -1467,6 +1467,171 @@ function computeRx(tid, ligaId, janela, escopo, mando){
   };
 }
 
+/* ---------- Tendências da partida: TODOS os mercados × jogos recentes de cada time.
+   Linhas "Mais de" e "Menos de" geradas pra cada mercado; o filtro de 70% faz a peneira. */
+const soma2 = (a, b) => (a != null && b != null) ? a + b : null;
+const TEND_VAL = {
+  gols:      j => soma2(j.gols, j.golsSof),
+  cantos:    j => soma2(j.own.cantos, j.adv.cantos),
+  cartoes:   j => (j.own.amarelos != null && j.adv.amarelos != null)
+               ? j.own.amarelos + j.adv.amarelos + (j.own.vermelhos || 0) + (j.adv.vermelhos || 0) : null,
+  faltas:    j => soma2(j.own.faltas, j.adv.faltas),
+  fin:       j => soma2(j.own.fin, j.adv.fin),
+  chutesGol: j => soma2(j.own.chutesGol, j.adv.chutesGol),
+  defesas:   j => soma2(j.own.defesas, j.adv.defesas),
+  laterais:  j => soma2(j.own.laterais, j.adv.laterais),
+  tiroMeta:  j => soma2(j.own.tiroMeta, j.adv.tiroMeta),
+};
+const TEND_DEFS = (() => {
+  const mercados = [
+    ["gols", "gols na partida", [1.5, 2.5, 3.5]],
+    ["cantos", "escanteios", [7.5, 8.5, 9.5, 10.5]],
+    ["cartoes", "cartões", [2.5, 3.5, 4.5, 5.5]],
+    ["faltas", "faltas na partida", [22.5, 24.5, 26.5]],
+    ["fin", "finalizações na partida", [20.5, 23.5, 26.5]],
+    ["chutesGol", "chutes a gol na partida", [7.5, 8.5, 9.5]],
+    ["defesas", "defesas de goleiro", [5.5, 6.5, 7.5]],
+    ["laterais", "arremessos laterais", [34.5, 38.5, 42.5]],
+    ["tiroMeta", "tiros de meta", [12.5, 14.5, 16.5]],
+  ];
+  const fmtL = L => String(L).replace(".", ",");
+  const defs = [];
+  for (const [tipo, nome, linhas] of mercados)
+    for (const L of linhas){
+      defs.push({ id: `o:${tipo}:${L}`, label: `Mais de ${fmtL(L)} ${nome}`, tipo, linha: L, dir: "o" });
+      defs.push({ id: `u:${tipo}:${L}`, label: `Menos de ${fmtL(L)} ${nome}`, tipo, linha: L, dir: "u" });
+    }
+  defs.push({ id: "ambas:sim", label: "Ambas marcam", tipo: "gols", linha: null, dir: "sim" });
+  defs.push({ id: "ambas:nao", label: "Ambas NÃO marcam", tipo: "gols", linha: null, dir: "nao" });
+  return defs;
+})();
+function tendPontos(tid, fx, def){
+  const js = [...getJogosRx(tid, fx.ligaId, state.rxJanela, state.rxEscopo, null)].reverse();
+  return js.map(j => {
+    const v = TEND_VAL[def.tipo](j);
+    if (v == null) return null;
+    const hit = def.dir === "sim" ? (j.gols > 0 && j.golsSof > 0)
+              : def.dir === "nao" ? !(j.gols > 0 && j.golsSof > 0)
+              : def.dir === "u" ? v < def.linha : v > def.linha;
+    return { v, hit, adv: j.advNome || "", ts: j.ts || "" };
+  }).filter(Boolean);
+}
+function abrirCardTendencia(fi, id, modo){
+  const fx = FIXTURES[fi];
+  const def = TEND_DEFS.find(d => d.id === id); if (!def) return;
+  const ehContinental = ehContinentalLiga(fx.ligaId);
+  let contexto = `últimos ${state.rxJanela} jogos de cada time`;
+  if (state.rxEscopo === "comp") contexto += ehContinental ? " · copas continentais" : ` · ${fx.competicao}`;
+  const pH = tendPontos(fx.homeId, fx, def), pA = tendPontos(fx.awayId, fx, def);
+  if (!pH.length && !pA.length) return;
+  if (modo === "grafico"){
+    const serie = (pts, nome, cor) => pts.length ? { nome, cor, pts, media: pts.reduce((a,p)=>a+p.v,0)/pts.length } : null;
+    state.card = { tipo: "grafico", formato: "sticker", fx, label: def.label, dec: 1, sufixo: "",
+                   linha: def.linha, contexto,
+                   series: [serie(pH, fx.home, "#2FD08A"), serie(pA, fx.away, "#F0B14A")].filter(Boolean) };
+  } else {
+    state.card = { tipo: "tendencia", formato: "sticker", fx, label: def.label, linha: def.linha, contexto,
+                   tH: { pts: pH, hit: pH.filter(p=>p.hit).length, n: pH.length },
+                   tA: { pts: pA, hit: pA.filter(p=>p.hit).length, n: pA.length } };
+  }
+  montarCardModal();
+}
+
+/* Card de tendência em números: fração grande de cada time + caixinhas coloridas por acerto */
+async function desenharTendencia(){
+  const c = state.card;
+  const UI = "-apple-system, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif";
+  const MONO = "'SF Mono', 'Roboto Mono', Menlo, monospace";
+  const W = 1080, cx = W / 2;
+  const oHeader = 88, oSub = 166, oCtx = 206, oNum = 330, oLbl = 408, oBoxes = 478;
+  const oFooter = 552, panelH = oFooter + 44;
+  const sticker = c.formato === "sticker";
+  const H = sticker ? panelH + 48 : (c.formato === "story" ? 1920 : 1350);
+  const cv = document.getElementById("cardCanvas");
+  if (!cv) return;
+  cv.width = W; cv.height = H;
+  const x = cv.getContext("2d");
+  x.clearRect(0, 0, W, H);
+  if (!sticker){
+    const g = x.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#0D1712"); g.addColorStop(0.5, "#0A0F0C"); g.addColorStop(1, "#07100B");
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+    const glow = x.createRadialGradient(W/2, H*0.3, 60, W/2, H*0.3, W*0.8);
+    glow.addColorStop(0, "rgba(47,208,138,0.12)"); glow.addColorStop(1, "rgba(47,208,138,0)");
+    x.fillStyle = glow; x.fillRect(0, 0, W, H);
+  }
+  const px = 24, pw = W - 48;
+  const py = sticker ? 24 : Math.max(24, Math.round((H - panelH) / 2));
+  x.fillStyle = "rgba(8,13,10,0.92)";
+  x.beginPath(); x.roundRect(px, py, pw, panelH, 44); x.fill();
+  x.strokeStyle = "rgba(47,208,138,0.4)"; x.lineWidth = 3;
+  x.beginPath(); x.roundRect(px, py, pw, panelH, 44); x.stroke();
+  const Y = o => py + o;
+  x.textAlign = "center"; x.textBaseline = "middle";
+
+  const [imH, imA] = await Promise.all([
+    carregaImg(SC_ASSETS.escudos?.[c.fx.home]), carregaImg(SC_ASSETS.escudos?.[c.fx.away]),
+  ]);
+  {
+    const yT = Y(oHeader);
+    x.font = `800 40px ${UI}`;
+    const nHW = x.measureText(c.fx.home).width, nAW = x.measureText(c.fx.away).width;
+    const cr = 64, gap = 14, meio = 56;
+    let cur = cx - (cr + gap + nHW + meio + nAW + gap + cr) / 2;
+    const crest = (img, x0) => {
+      x.save(); x.beginPath(); x.roundRect(x0, yT - cr/2, cr, cr, 15); x.clip();
+      if (img) x.drawImage(img, x0, yT - cr/2, cr, cr);
+      else { x.fillStyle = "#1E2A23"; x.fillRect(x0, yT - cr/2, cr, cr); }
+      x.restore();
+    };
+    crest(imH, cur); cur += cr + gap;
+    x.textAlign = "left"; x.font = `800 40px ${UI}`; x.fillStyle = "#EAF2EC";
+    x.fillText(c.fx.home, cur, yT); cur += nHW;
+    x.textAlign = "center"; x.fillStyle = "#64756B"; x.font = `600 32px ${UI}`;
+    x.fillText("×", cur + meio/2, yT); cur += meio;
+    x.textAlign = "left"; x.fillStyle = "#EAF2EC"; x.font = `800 40px ${UI}`;
+    x.fillText(c.fx.away, cur, yT); cur += nAW + gap;
+    crest(imA, cur);
+    x.textAlign = "center";
+  }
+  x.font = `700 26px ${MONO}`; x.fillStyle = "#2FD08A";
+  x.fillText(c.label.toUpperCase(), cx, Y(oSub));
+  x.font = `500 22px ${MONO}`; x.fillStyle = "#93A399";
+  x.fillText(c.contexto, cx, Y(oCtx));
+
+  // frações gigantes + caixinhas por acerto
+  const off = 250;
+  const lado = (t, nome, cor, colCx) => {
+    if (!t.n) return;
+    x.font = `800 110px ${UI}`; x.fillStyle = cor;
+    x.fillText(`${t.hit}/${t.n}`, colCx, Y(oNum));
+    x.font = `700 22px ${MONO}`; x.fillStyle = "#93A399";
+    let nm = `JOGOS DO ${nome.toUpperCase()}`;
+    while (x.measureText(nm).width > 440 && nm.length > 10) nm = nm.slice(0, -1);
+    x.fillText(nm, colCx, Y(oLbl));
+    const bs = 40, bg2 = 8, totalW = t.pts.length * bs + (t.pts.length - 1) * bg2;
+    let bx = colCx - totalW / 2;
+    t.pts.forEach(p => {
+      x.fillStyle = p.hit ? (cor === "#2FD08A" ? "rgba(47,208,138,0.18)" : "rgba(240,177,74,0.18)") : "rgba(255,255,255,0.06)";
+      x.beginPath(); x.roundRect(bx, Y(oBoxes) - bs/2, bs, bs, 9); x.fill();
+      x.font = `800 20px ${MONO}`; x.fillStyle = p.hit ? cor : "#64756B";
+      x.fillText(String(p.v), bx + bs/2, Y(oBoxes) + 1);
+      bx += bs + bg2;
+    });
+  };
+  lado(c.tH, c.fx.home, "#2FD08A", cx - off);
+  lado(c.tA, c.fx.away, "#F0B14A", cx + off);
+
+  const yRod = Y(oFooter);
+  x.textAlign = "right"; x.font = `800 26px ${UI}`;
+  const wEx = x.measureText("!").width;
+  x.fillStyle = "#2FD08A"; x.fillText("!", px+pw-40, yRod);
+  x.fillStyle = "#FFFFFF"; x.fillText("APITOU", px+pw-40-wEx, yRod);
+  x.textAlign = "left"; x.font = `500 22px ${MONO}`; x.fillStyle = "#93A399";
+  x.fillText("os números falam · tendência da partida", px+40, yRod);
+  x.textAlign = "center";
+}
+
 /* ---------- Medidor de confronto (DvP): quanto cada time CEDE de cada estatística.
    Percentil do adversário na base inteira de times → chama (cede muito) / floco (cede pouco). */
 let _dvp = null;
@@ -2317,22 +2482,24 @@ async function desenharGrafico(){
     }
     const top = yB + 44, bottom = top + chartH - 56;
     const n = s.pts.length, slot = aw / n, barW = Math.min(56, slot * 0.62);
-    const vals = s.pts.map(p => p.v), max = Math.max(...vals, 0.001);
-    // linha da média
-    const yMed = bottom - (s.media / max) * (bottom - top - 26);
+    const vals = s.pts.map(p => p.v);
+    // escala inclui a linha de mercado (cards de tendência), pra ela sempre caber
+    const max = Math.max(...vals, c.linha ?? 0, 0.001);
+    const ref = c.linha != null ? c.linha : s.media;
+    const yMed = bottom - (ref / max) * (bottom - top - 26);
     x.setLineDash([7, 7]); x.strokeStyle = "rgba(255,255,255,0.4)"; x.lineWidth = 2;
     x.beginPath(); x.moveTo(ax0, yMed); x.lineTo(ax0 + aw, yMed); x.stroke();
     x.setLineDash([]);
     // barras
     s.pts.forEach((p, i) => {
       const bx = ax0 + slot * i + slot / 2;
-      const zero = !p.v;
+      const apagada = p.hit !== undefined ? !p.hit : !p.v; // tendência: colore só quem bateu a linha
       const bh = Math.max(8, (p.v / max) * (bottom - top - 26));
       const by = bottom - bh;
-      x.fillStyle = zero ? "rgba(255,255,255,0.10)" : s.cor;
+      x.fillStyle = apagada ? "rgba(255,255,255,0.10)" : s.cor;
       x.beginPath(); x.roundRect(bx - barW/2, by, barW, bh, 6); x.fill();
       x.textAlign = "center"; x.font = `800 24px ${UI}`;
-      x.fillStyle = zero ? "#64756B" : s.cor;
+      x.fillStyle = apagada ? "#64756B" : s.cor;
       x.fillText(String(Number.isInteger(p.v) ? p.v : fmt(p.v, c.dec)) + (c.sufixo || ""), bx, by - 17);
       let adv = p.adv;
       x.font = `500 16px ${MONO}`;
@@ -2342,9 +2509,9 @@ async function desenharGrafico(){
       x.fillStyle = "#64756B"; x.font = `500 15px ${MONO}`;
       x.fillText(p.ts.slice(5).split("-").reverse().join("/"), bx, bottom + 42);
     });
-    // rótulo da média por cima, com fundinho, ABAIXO da linha (não cobre valor de barra)
+    // rótulo da referência por cima, com fundinho, ABAIXO da linha (não cobre valor de barra)
     x.font = `600 18px ${MONO}`;
-    const mTxt = `média ${fmt(s.media, c.dec)}`;
+    const mTxt = c.linha != null ? `linha ${String(c.linha).replace(".", ",")}` : `média ${fmt(s.media, c.dec)}`;
     const mW = x.measureText(mTxt).width;
     x.fillStyle = "rgba(8,13,10,0.9)";
     x.beginPath(); x.roundRect(ax0 + aw - mW - 14, yMed + 5, mW + 14, 24, 6); x.fill();
@@ -2611,6 +2778,7 @@ async function desenharCard(){
   if (c.tipo === "arbitro") return desenharArbitro();
   if (c.tipo === "timeSolo") return desenharTimeSolo();
   if (c.tipo === "grafico") return desenharGrafico();
+  if (c.tipo === "tendencia") return desenharTendencia();
   if (c.formato === "sticker") return desenharSticker();
   const W = 1080, H = c.formato === "story" ? 1920 : 1350;
   const cv = document.getElementById("cardCanvas");
@@ -4514,7 +4682,69 @@ function renderJogo(){
           linha("cantos", "Escanteios", rxH.cantos, rxA.cantos, 1, "", badge("cantos","cantosSof",rxA,fx.away), badge("cantos","cantosSof",rxH,fx.home)))}
         ${grupo("Defesa", linha("golsSof", "Gols sofridos", rxH.golsSof, rxA.golsSof) + linha("finSof", "Finalizações sofridas", rxH.finSof, rxA.finSof) + linha("cantosSof", "Escanteios cedidos", rxH.cantosSof, rxA.cantosSof) + linha("defesas", "Defesas de goleiro", rxH.defesas, rxA.defesas))}
         ${grupo("Disciplina", linha("faltas", "Faltas cometidas", rxH.faltas, rxA.faltas) + linha("amarelos", "Cartões amarelos", rxH.amarelos, rxA.amarelos) + linha("vermelhos", "Cartões vermelhos", rxH.vermelhos, rxA.vermelhos, 2))}
-        ${grupo("Controle", linha("posse", "Posse de bola", rxH.posse, rxA.posse, 0, "%") + linha("laterais", "Arremessos laterais", rxH.laterais, rxA.laterais) + linha("tiroMeta", "Tiros de meta", rxH.tiroMeta, rxA.tiroMeta))}`;
+        ${grupo("Controle", linha("posse", "Posse de bola", rxH.posse, rxA.posse, 0, "%") + linha("laterais", "Arremessos laterais", rxH.laterais, rxA.laterais) + linha("tiroMeta", "Tiros de meta", rxH.tiroMeta, rxA.tiroMeta))}
+        ${(() => {
+          // tendências da partida: varre TODOS os mercados, mostra só 70%+, mais fortes primeiro
+          const tendRow = def => {
+            const pH = tendPontos(fx.homeId, fx, def), pA = tendPontos(fx.awayId, fx, def);
+            if (!pH.length || !pA.length) return null;
+            const rH = { hit: pH.filter(p=>p.hit).length, n: pH.length };
+            const rA = { hit: pA.filter(p=>p.hit).length, n: pA.length };
+            const pct = Math.max(rH.hit/rH.n, rA.hit/rA.n);
+            if (pct < 0.7) return null;
+            return { def, rH, rA, pct, pH, pA };
+          };
+          const quentes = TEND_DEFS.map(tendRow).filter(Boolean).sort((a,b) => b.pct - a.pct);
+          const MAXT = 12;
+          const mostradas = quentes.slice(0, MAXT);
+          if (!mostradas.length) return "";
+          const painel = t => {
+            const key = "tend:" + t.def.id;
+            if (state.rxChart !== key) return "";
+            const bloco = (pts, nome, cor) => {
+              if (!pts.length) return "";
+              const maxV = Math.max(...pts.map(p=>p.v), t.def.linha ?? 0, 0.001);
+              const chartH = 105, rodape = 36;
+              const yL = t.def.linha != null ? rodape + t.def.linha/maxV*chartH : null;
+              return `<div style="margin:12px 0 2px; font-weight:800; font-size:12.5px; color:${cor}">${nome}</div>
+                <div style="position:relative">
+                  ${yL != null ? `<div style="position:absolute; left:0; right:0; bottom:${yL}px; border-top:1.5px dashed rgba(255,255,255,0.4); z-index:2; pointer-events:none"></div>
+                  <div class="tnum" style="position:absolute; right:2px; bottom:${yL + 3}px; font-size:10px; color:var(--txt3); z-index:2; pointer-events:none">linha ${String(t.def.linha).replace(".",",")}</div>` : ""}
+                  <div style="display:flex; align-items:flex-end; gap:5px; height:${chartH + rodape + 20}px">
+                  ${pts.map(p => {
+                    const h = Math.max(6, p.v/maxV*chartH);
+                    return `<div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%">
+                      <div class="tnum" style="font-size:11px; font-weight:800; color:${p.hit ? cor : "var(--txt3)"}">${p.v}</div>
+                      <div style="width:100%; max-width:40px; height:${h}px; border-radius:4px 4px 0 0; background:${p.hit ? cor : "rgba(255,255,255,0.10)"}; margin-top:2px"></div>
+                      <div style="height:${rodape}px; display:flex; flex-direction:column; align-items:center; padding-top:4px; width:100%">
+                        <span style="font-size:9px; color:var(--txt3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%">${p.adv}</span>
+                        <span class="tnum" style="font-size:9px; color:var(--txt3)">${p.ts.slice(5).split("-").reverse().join("/")}</span>
+                      </div></div>`;
+                  }).join("")}
+                  </div></div>`;
+            };
+            return `<div style="padding:2px 2px 14px; border-bottom:1px solid rgba(255,255,255,0.05)">
+              ${bloco(t.pH, fx.home, "var(--acc)")}${bloco(t.pA, fx.away, "#F0B14A")}
+              <div style="display:flex; gap:10px; margin-top:14px; flex-wrap:wrap">
+                <button class="h2h-cardbtn" style="flex:1; min-width:180px; margin:0" onclick="abrirCardTendencia(${fi}, '${t.def.id}', 'grafico')">${svgIco("grafico")} Gerar card · gráfico</button>
+                <button class="h2h-cardbtn" style="flex:1; min-width:180px; margin:0" onclick="abrirCardTendencia(${fi}, '${t.def.id}', 'numeros')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4M8 11l4 4 4-4M12 15V3"/></svg> Gerar card · números</button>
+              </div>
+            </div>`;
+          };
+          const rows = mostradas.map(t => {
+            const key = "tend:" + t.def.id, aberto = state.rxChart === key;
+            const hot = r => r.hit / r.n >= 0.7;
+            const barra = (r, cls) => `<div class="rx-bar"><div class="rx-fill ${cls}" style="width:${r.hit/r.n*100}%"></div></div>`;
+            return `<div class="rx-row rx-click ${aberto ? "rx-open" : ""}" title="Ver jogo a jogo" onclick="setRxChart('${key}')">
+              <div class="rx-side"><span class="rx-val tnum" style="font-size:14px;${hot(t.rH) ? "" : "opacity:.5"}">${t.rH.hit}/${t.rH.n}</span>${barra(t.rH,"home")}</div>
+              <div class="rx-label">${t.def.label} <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5; margin-left:5px; transform:rotate(${aberto ? 180 : 0}deg)"><path d="M6 9l6 6 6-6"/></svg></div>
+              <div class="rx-side away">${barra(t.rA,"away")}<span class="rx-val tnum" style="font-size:14px;${hot(t.rA) ? "" : "opacity:.5"}">${t.rA.hit}/${t.rA.n}</span></div>
+            </div>${painel(t)}`;
+          }).join("");
+          return `<div class="rx-group"><div class="rx-group-t">Tendências da partida</div>
+            <div class="rx-sample" style="margin:2px 0 6px">todos os mercados varridos · só o que bateu 70%+ nos jogos recentes de pelo menos um time · ${quentes.length > MAXT ? `as ${MAXT} mais fortes de ${quentes.length} · ` : ""}toque numa linha pra ver o jogo a jogo</div>
+            ${rows}</div>`;
+        })()}`;
     } else {
       corpo = `<div class="empty-box" style="margin-top:6px">Um dos times ainda não tem jogos suficientes ${state.rxEscopo==="comp" ? (ehContinental ? "em copas continentais" : `no ${fx.competicao}`) : ""} pra calcular médias — em "Quais jogos?", troque pra "Todos os jogos".</div>`;
     }
