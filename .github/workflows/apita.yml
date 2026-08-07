@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Dependências do push
-        run: pip -q install google-auth
+        run: pip -q install google-auth requests
       - name: Vigia escalações
         env:
           SPORTMONKS_TOKEN: ${{ secrets.SPORTMONKS_TOKEN }}
