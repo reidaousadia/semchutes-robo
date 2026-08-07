@@ -1961,7 +1961,7 @@ function renderSearch(){
   el.innerHTML = `
     <p class="eyebrow">Estatística de jogadores · player props</p>
     <h1 class="page">Quanto um jogador finaliza — de verdade</h1>
-    <p class="sub">Médias reais da temporada 2026, direto da API-Football. Sem achismo: só o dado.</p>
+    <p class="sub">Médias reais da temporada 2026, direto da fonte. Sem achismo: só o dado.</p>
     <div class="searchbox">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
       <input id="q" placeholder="Buscar jogador ou time — ex.: Pedro, Flamengo…" value="${escapeHtml(state.query)}" autocomplete="off">
@@ -2545,10 +2545,10 @@ function emptyState(msg){
     <div>${msg}</div></div>`;
 }
 function sourceNote(){
-  return `<div class="foot-note"><span class="live"></span> Dados de exemplo no formato da API-Football · Apitou · atualizado todo dia</div>`;
+  return `<div class="foot-note"><span class="live"></span> Dados de exemplo · Apitou · atualizado todo dia</div>`;
 }
 function sourceNoteQI(){
-  return `<div class="foot-note"><span class="live"></span> Estatísticas reais da temporada 2026, agregadas de todas as competições de cada clube (API-Football) · Apitou · os números falam</div>`;
+  return `<div class="foot-note"><span class="live"></span> Estatísticas reais da temporada 2026, agregadas de todas as competições de cada clube · Apitou · os números falam</div>`;
 }
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
@@ -3532,7 +3532,7 @@ async function desenharCard(){
   x.font = `700 34px ${UI}`; x.fillStyle = "#2AE8E0";
   x.fillText("APITOU!", cx, H - H*0.055);
   x.font = `500 24px ${MONO}`; x.fillStyle = "#6B6B76";
-  x.fillText("estatística real · API-Football", cx, H - H*0.055 + 44);
+  x.fillText("estatística real · apitou.com.br", cx, H - H*0.055 + 44);
 }
 /* Sticker compacto pra sobrepor em vídeo — fundo transparente fora do painel.
    Com extrato jogo a jogo da estatística (pedido do Pedro: "quantas finalizações
