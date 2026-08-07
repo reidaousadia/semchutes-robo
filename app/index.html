@@ -734,7 +734,9 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   .esc-desf span { color: var(--muted); }
 
   /* ---------- abas da tela do jogo (Números / Confronto / Quentes) ---------- */
-  .jogo-tabs { display: flex; margin: 18px 0 4px; border-bottom: 1px solid var(--border-soft); }
+  .jogo-tabs { display: flex; margin: 18px 0 4px; border-bottom: 1px solid var(--border-soft);
+    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .jogo-tabs::-webkit-scrollbar { display: none; }
   /* tabela de classificação (aba do jogo) — os dois clubes ganham destaque */
   .classif-wrap { margin-top: 14px; overflow-x: auto; }
   .classif-table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 13.5px; }
@@ -764,13 +766,14 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
     .cl-pos { width: 22px; }
   }
   .jogo-tab {
-    appearance: none; border: 0; background: transparent; cursor: pointer; flex: 1;
-    font-family: var(--f-ui); font-weight: 700; font-size: 14px; color: var(--muted);
-    padding: 11px 6px; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
+    appearance: none; border: 0; background: transparent; cursor: pointer; flex: none;
+    font-family: var(--f-ui); font-weight: 800; font-size: 13px; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--muted);
+    padding: 13px 15px; border-bottom: 3px solid transparent; margin-bottom: -1px; white-space: nowrap;
   }
   .jogo-tab:hover { color: var(--text-dim); }
   .jogo-tab.on { color: var(--acc); border-bottom-color: var(--acc); }
-  @media (max-width: 520px){ .jogo-tab { font-size: 12.5px; padding: 10px 2px; } }
+  @media (max-width: 520px){ .jogo-tab { font-size: 12px; padding: 12px 11px; } }
   /* ---------- sidebar de ligas (desktop) ---------- */
   .home-grid { display: flex; gap: 24px; align-items: flex-start; }
   .home-main { flex: 1; min-width: 0; }
@@ -5239,7 +5242,8 @@ function renderJogo(){
   // ----- Abas grandes: a pergunta que o usuário tem na cabeça -----
   const tabBtn = (k, txt) => `<button class="jogo-tab ${tab===k?'on':''}" onclick="setJogoTab('${k}')">${txt}</button>`;
   const temClassif = !!(SEM.classificacao || {})[String(fx.ligaId)];
-  const tabsRow = `<div class="jogo-tabs">${tabBtn("stats",`${svgIco("grafico")} Números`)}${tabBtn("h2h",`${svgIco("versus")} Confronto`)}${tabBtn("quentes",`${svgIco("chama")} Quentes`)}${temClassif ? tabBtn("classif",`${svgIco("trofeu")} Classificação`) : ""}${tabBtn("esc",`${svgIco("prancheta")} Escalações`)}</div>`;
+  // estilo FlashScore: texto maiúsculo puro, ativa em ciano — ícone aqui só poluía
+  const tabsRow = `<div class="jogo-tabs">${tabBtn("stats", "Números")}${tabBtn("h2h", "Confronto")}${tabBtn("quentes", "Quentes")}${temClassif ? tabBtn("classif", "Classificação") : ""}${tabBtn("esc", "Escalações")}</div>`;
 
   // ----- Filtros com rótulo-pergunta (só os que fazem sentido na aba) -----
   const labelComp = ehContinental ? "Só continentais" : `Só ${fx.competicao}`;
