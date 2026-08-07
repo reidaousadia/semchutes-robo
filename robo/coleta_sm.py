@@ -469,7 +469,8 @@ print(f"árbitros com jogo a jogo: {sum(1 for a in arbitros.values() if a.get('u
 
 # ================= 8b. catálogo COMPLETO de times (aba Times) =================
 # todos os times das ligas assinadas; quem não está na agenda da semana ganha
-# forma "lite" (últimos 10 resultados, só placar — barato: ~2 chamadas por time)
+# os últimos 10 jogos COM estatísticas completas (mesmas ~2 chamadas por time —
+# a diferença é só o include; decisão do Pedro 07/08: perfil completo pra todos)
 catalogo_times, escudos_cat, ids_cat = [], {}, set()
 for lid in LIGAS:
     liga_d = sm(f"/leagues/{lid}", include="currentseason").get("data") or {}
@@ -489,7 +490,7 @@ for i, tid in enumerate(lite_ids):
     for _ in range(2):  # ~6 meses cobrem 10 jogos na maioria das ligas
         ini_l = fim_l - timedelta(days=90)
         for fx in sm_paginado(f"/fixtures/between/{ini_l.isoformat()}/{fim_l.isoformat()}/{tid}",
-                              include="state;participants;scores"):
+                              include="state;participants;scores;statistics"):
             if (fx.get("state") or {}).get("short_name") not in FINALIZADO: continue
             if fx.get("league_id") not in LIGAS: continue
             casa_p = next((p for p in fx.get("participants", []) if (p.get("meta") or {}).get("location") == "home"), None)
@@ -502,9 +503,15 @@ for i, tid in enumerate(lite_ids):
                 v = (sc.get("score") or {}).get("goals") or 0
                 if sc.get("participant_id") == tid: g = v
                 else: gs = v
+            own, adv = {}, {}
+            for st in fx.get("statistics", []):
+                campo = T_TIME.get(st.get("type_id"))
+                if not campo: continue
+                v = (st.get("data") or {}).get("value") or 0
+                (own if st.get("participant_id") == tid else adv)[campo] = v
             jogos_l.append({"liga": fx["league_id"], "ts": data_local(fx["starting_at"]),
                             "advNome": (fora_p if eh_casa else casa_p)["name"],
-                            "casa": eh_casa, "own": {}, "adv": {}, "gols": g, "golsSof": gs})
+                            "casa": eh_casa, "own": own, "adv": adv, "gols": g, "golsSof": gs})
         fim_l = ini_l - timedelta(days=1)
         if len(jogos_l) >= 10: break
     jogos_l.sort(key=lambda x: x["ts"], reverse=True)
