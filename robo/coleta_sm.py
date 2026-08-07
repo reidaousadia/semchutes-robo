@@ -467,6 +467,52 @@ for fid2, arb2 in arbitros.items():
     if lst: arb2["ultimos"] = lst
 print(f"árbitros com jogo a jogo: {sum(1 for a in arbitros.values() if a.get('ultimos'))}", flush=True)
 
+# ================= 8b. catálogo COMPLETO de times (aba Times) =================
+# todos os times das ligas assinadas; quem não está na agenda da semana ganha
+# forma "lite" (últimos 10 resultados, só placar — barato: ~2 chamadas por time)
+catalogo_times, escudos_cat, ids_cat = [], {}, set()
+for lid in LIGAS:
+    liga_d = sm(f"/leagues/{lid}", include="currentseason").get("data") or {}
+    sid = (liga_d.get("currentseason") or {}).get("id")
+    if not sid: continue
+    for tm in sm_paginado(f"/teams/seasons/{sid}"):
+        catalogo_times.append({"id": tm["id"], "nome": tm["name"], "liga": lid})
+        if tm["id"] not in ids_cat:
+            ids_cat.add(tm["id"])
+            if tm.get("image_path"):
+                escudos_cat[tm["name"]] = tm["image_path"].replace("https://cdn.sportmonks.com", "/smimg")
+print(f"catálogo: {len(ids_cat)} times únicos nas {len(LIGAS)} ligas", flush=True)
+
+lite_ids = [t for t in ids_cat if t not in teams]
+for i, tid in enumerate(lite_ids):
+    jogos_l, fim_l = [], hoje
+    for _ in range(2):  # ~6 meses cobrem 10 jogos na maioria das ligas
+        ini_l = fim_l - timedelta(days=90)
+        for fx in sm_paginado(f"/fixtures/between/{ini_l.isoformat()}/{fim_l.isoformat()}/{tid}",
+                              include="state;participants;scores"):
+            if (fx.get("state") or {}).get("short_name") not in FINALIZADO: continue
+            if fx.get("league_id") not in LIGAS: continue
+            casa_p = next((p for p in fx.get("participants", []) if (p.get("meta") or {}).get("location") == "home"), None)
+            fora_p = next((p for p in fx.get("participants", []) if (p.get("meta") or {}).get("location") == "away"), None)
+            if not casa_p or not fora_p: continue
+            eh_casa = casa_p["id"] == tid
+            g = gs = 0
+            for sc in fx.get("scores", []):
+                if sc.get("description") != "CURRENT": continue
+                v = (sc.get("score") or {}).get("goals") or 0
+                if sc.get("participant_id") == tid: g = v
+                else: gs = v
+            jogos_l.append({"liga": fx["league_id"], "ts": data_local(fx["starting_at"]),
+                            "advNome": (fora_p if eh_casa else casa_p)["name"],
+                            "casa": eh_casa, "own": {}, "adv": {}, "gols": g, "golsSof": gs})
+        fim_l = ini_l - timedelta(days=1)
+        if len(jogos_l) >= 10: break
+    jogos_l.sort(key=lambda x: x["ts"], reverse=True)
+    if jogos_l and str(tid) not in raiox_raw:
+        raiox_raw[str(tid)] = {"geral": jogos_l[:10], "liga": {}}
+    if (i + 1) % 50 == 0: print(f"  forma lite: {i+1}/{len(lite_ids)}", flush=True)
+print(f"forma lite: {len(lite_ids)} times fora da semana", flush=True)
+
 # ================= 9. monta dados.js =================
 escudos = {}
 for fx in semana:
@@ -481,7 +527,10 @@ catalogo = {str(lid): {"nome": v[0], "tipo": v[1], "grupo": v[2], "tier": v[3]}
 sc_semana = {"geradoEm": datetime.now(BRT).isoformat(), "fonte": "sportmonks",
              "ligas": catalogo, "ref_cedidas": round(ref_ced, 2),
              "fixtures": semana, "elencos": elencos, "raioxRaw": raiox_raw,
-             "h2h": h2h, "jogHist": jog_hist, "escalacoes": escalacoes, "arbitros": arbitros}
+             "h2h": h2h, "jogHist": jog_hist, "escalacoes": escalacoes, "arbitros": arbitros,
+             "catalogoTimes": catalogo_times}
+for _nome, _url in escudos_cat.items():
+    escudos.setdefault(_nome, _url)
 sc_assets = {"fotos": fotos, "escudos": escudos}
 
 destino = os.path.join(RAIZ, "app", "dados.js")
