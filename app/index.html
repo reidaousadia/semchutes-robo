@@ -765,18 +765,19 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
       scrollbar-width: thin; }
     .filtros-mobile { display: none !important; }  /* no desktop, o sidebar assume */
   }
-  .ls-h { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  .ls-h { font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
     color: var(--muted); margin: 18px 0 6px 8px; }
   .ls-h:first-child { margin-top: 4px; }
-  .ls-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  .ls-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
     appearance: none; background: transparent; border: 0; cursor: pointer;
-    padding: 8px 8px; border-radius: 8px; color: var(--text-dim);
-    font-family: var(--f-ui); font-size: 13px; font-weight: 600; }
+    padding: 10px 10px; border-radius: 8px; color: var(--text-dim);
+    font-family: var(--f-ui); font-size: 14.5px; font-weight: 650; }
   .ls-item:hover { background: var(--surface); color: var(--text); }
   .ls-item.on { background: var(--acc-soft); color: var(--acc); }
   .ls-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ls-item .n { margin-left: auto; font-family: var(--f-mono); font-size: 10.5px; color: var(--muted); flex: none; }
-  .ls-pin { flex: none; color: var(--muted); font-size: 13px; padding: 0 2px; opacity: 0; transition: opacity .12s; }
+  .ls-item .n { margin-left: auto; font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); flex: none; }
+  /* estrela SEMPRE visível (favoritar liga é recurso, não segredo) */
+  .ls-pin { flex: none; color: var(--muted); font-size: 17px; padding: 0 3px; opacity: .8; transition: opacity .12s, color .12s; }
   .ls-item:hover .ls-pin { opacity: 1; }
   .ls-pin.on { color: var(--amber); opacity: 1; }
 
@@ -936,14 +937,20 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   .busca-modal { position: fixed; top: 6vh; left: 50%; transform: translateX(-50%); width: min(560px, 94vw);
     max-height: 84vh; overflow-y: auto; z-index: 130; background: var(--bg); border: 1px solid var(--border);
     border-radius: 16px; box-shadow: var(--shadow); -webkit-overflow-scrolling: touch; }
-  /* barra de busca escrita no header (desktop); no mobile vira só a lupa */
+  /* barra de busca escrita no header (desktop); no mobile vira uma FILEIRA inteira abaixo */
   .header-busca { display: none; }
+  .busca-mob-row { display: block; padding: 0 16px 10px; }
+  .busca-mob { display: flex; align-items: center; gap: 9px; width: 100%; box-sizing: border-box;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    color: var(--muted); font: 500 14px/1 var(--f-ui); padding: 12px 16px; cursor: pointer; }
+  .busca-mob:active { border-color: var(--acc); }
+  .so-mobile { display: none !important; }
   @media (min-width: 760px){
     .header-busca { display: inline-flex; align-items: center; gap: 8px; background: var(--surface);
       border: 1px solid var(--border); border-radius: 999px; color: var(--muted);
       font: 500 13px/1 var(--f-ui); padding: 10px 16px; min-width: 250px; cursor: pointer; }
     .header-busca:hover { border-color: var(--acc); color: var(--text-dim); }
-    .so-mobile { display: none !important; }
+    .busca-mob-row { display: none; }
   }
   .qt-seqline { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700;
     padding: 8px 10px; background: var(--surface); border-left: 3px solid var(--acc); border-radius: 6px; margin-bottom: 6px; }
@@ -1138,6 +1145,12 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
     </button>
     <button class="icon-btn" id="themeBtn" onclick="toggleTheme()" aria-label="Alternar tema" title="Alternar tema">
       <svg id="themeIcon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></svg>
+    </button>
+  </div>
+  <div class="busca-mob-row">
+    <button class="busca-mob" onclick="abrirBusca()" aria-label="Buscar">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      Pesquisar time, liga ou jogador…
     </button>
   </div>
 </header>
