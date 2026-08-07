@@ -59,6 +59,36 @@ def sm(path, **params):
             print("retry", path, e, flush=True); time.sleep(4)
     return {}
 
+def push_fcm(titulo, corpo):
+    """Dispara push nativo pro tópico 'escalacoes' via FCM (Android/iOS).
+    Silencioso se o secret não existir — o Telegram continua sendo o canal principal."""
+    sa = os.environ.get("FCM_SERVICE_ACCOUNT")
+    if not sa: return False
+    try:
+        from google.oauth2 import service_account
+        import google.auth.transport.requests as garq
+        info = json.loads(sa)
+        creds = service_account.Credentials.from_service_account_info(
+            info, scopes=["https://www.googleapis.com/auth/firebase.messaging"])
+        creds.refresh(garq.Request())
+        req = urllib.request.Request(
+            f"https://fcm.googleapis.com/v1/projects/{info['project_id']}/messages:send",
+            data=json.dumps({"message": {
+                "topic": "escalacoes",
+                "notification": {"title": titulo, "body": corpo},
+                "apns": {"payload": {"aps": {"sound": "default", "badge": 1}}},
+                "android": {"priority": "HIGH"},
+            }}).encode(),
+            headers={"Authorization": f"Bearer {creds.token}",
+                     "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            ok = r.status == 200
+        if ok: print("push FCM enviado", flush=True)
+        return ok
+    except Exception as e:
+        print("push fcm falhou:", e, flush=True)
+        return False
+
 def telegram(texto):
     data = urllib.parse.urlencode({"chat_id": CANAL, "text": texto,
                                    "parse_mode": "Markdown"}).encode()
@@ -132,6 +162,8 @@ def apita(c):
     if telegram("\n".join(partes)):
         estado["alertados"].append(c["fid"])
         salva_estado()
+        push_fcm("🚨 Apitou! Escalação confirmada",
+                 f"{c['casa']} x {c['fora']} · {c['liga']} · {hora} — toca pra ver o raio-x completo")
         print(f"APITOU: {c['casa']} x {c['fora']}", flush=True)
         return True
     return False
