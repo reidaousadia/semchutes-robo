@@ -472,10 +472,12 @@ print(f"árbitros com jogo a jogo: {sum(1 for a in arbitros.values() if a.get('u
 # os últimos 10 jogos COM estatísticas completas (mesmas ~2 chamadas por time —
 # a diferença é só o include; decisão do Pedro 07/08: perfil completo pra todos)
 catalogo_times, escudos_cat, ids_cat = [], {}, set()
+sid_por_liga = {}
 for lid in LIGAS:
     liga_d = sm(f"/leagues/{lid}", include="currentseason").get("data") or {}
     sid = (liga_d.get("currentseason") or {}).get("id")
     if not sid: continue
+    sid_por_liga[lid] = sid
     for tm in sm_paginado(f"/teams/seasons/{sid}"):
         catalogo_times.append({"id": tm["id"], "nome": tm["name"], "liga": lid})
         if tm["id"] not in ids_cat:
@@ -520,6 +522,29 @@ for i, tid in enumerate(lite_ids):
     if (i + 1) % 50 == 0: print(f"  forma lite: {i+1}/{len(lite_ids)}", flush=True)
 print(f"forma lite: {len(lite_ids)} times fora da semana", flush=True)
 
+# ================= 8c. classificação (só ligas de pontos corridos) =================
+# 1 chamada por liga; copas/continentais ficam de fora (grupos/mata-mata não é tabela)
+classificacao = {}
+for lid, sid in sid_por_liga.items():
+    if LIGAS[lid][1] != "liga": continue
+    rows = sm(f"/standings/seasons/{sid}", include="participant;details.type").get("data") or []
+    tab = []
+    for r in rows:
+        det = {}
+        for dd in r.get("details", []):
+            det[((dd.get("type") or {}).get("developer_name") or "")] = dd.get("value")
+        tab.append({"tid": r.get("participant_id"), "pos": r.get("position"),
+                    "nome": (r.get("participant") or {}).get("name"),
+                    "pts": r.get("points"), "j": det.get("OVERALL_MATCHES"),
+                    "v": det.get("OVERALL_WINS"), "e": det.get("OVERALL_DRAWS"),
+                    "d": det.get("OVERALL_LOST"), "gp": det.get("OVERALL_SCORED"),
+                    "gc": det.get("OVERALL_CONCEDED"),
+                    "sg": det.get("OVERALL_GOAL_DIFFERENCE")})
+    if tab:
+        tab.sort(key=lambda x: x["pos"] or 999)
+        classificacao[str(lid)] = tab
+print(f"classificação: {len(classificacao)} ligas com tabela", flush=True)
+
 # ================= 9. monta dados.js =================
 escudos = {}
 for fx in semana:
@@ -535,7 +560,7 @@ sc_semana = {"geradoEm": datetime.now(BRT).isoformat(), "fonte": "sportmonks",
              "ligas": catalogo, "ref_cedidas": round(ref_ced, 2),
              "fixtures": semana, "elencos": elencos, "raioxRaw": raiox_raw,
              "h2h": h2h, "jogHist": jog_hist, "escalacoes": escalacoes, "arbitros": arbitros,
-             "catalogoTimes": catalogo_times}
+             "catalogoTimes": catalogo_times, "classificacao": classificacao}
 for _nome, _url in escudos_cat.items():
     escudos.setdefault(_nome, _url)
 sc_assets = {"fotos": fotos, "escudos": escudos}
