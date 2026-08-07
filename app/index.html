@@ -734,8 +734,9 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   .esc-desf span { color: var(--muted); }
 
   /* ---------- abas da tela do jogo (Números / Confronto / Quentes) ---------- */
-  .jogo-tabs { display: flex; margin: 18px 0 4px; border-bottom: 1px solid var(--border-soft);
-    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .jogo-tabs { display: flex; margin: 18px 0 8px; border-bottom: 1px solid var(--border-soft);
+    background: var(--surface); border: 1px solid var(--border-soft); border-radius: 12px;
+    padding: 0 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   .jogo-tabs::-webkit-scrollbar { display: none; }
   /* tabela de classificação (aba do jogo) — os dois clubes ganham destaque */
   .classif-wrap { margin-top: 14px; overflow-x: auto; }
