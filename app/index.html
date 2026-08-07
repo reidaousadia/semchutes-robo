@@ -982,6 +982,7 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   /* barra de busca escrita no header (desktop); no mobile vira uma FILEIRA inteira abaixo */
   .header-busca { display: none; }
   .busca-mob-row { display: block; padding: 0 16px 10px; }
+  body.tela-detalhe .busca-mob-row { display: none; }   /* detalhe: busca sai, conteúdo sobe */
   .busca-mob { display: flex; align-items: center; gap: 9px; width: 100%; box-sizing: border-box;
     background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
     color: var(--muted); font: 500 14px/1 var(--f-ui); padding: 12px 16px; cursor: pointer; }
@@ -5492,10 +5493,10 @@ function renderJogo(){
     }
   }
 
-  // faixa do árbitro (quando já designado) — clicável → perfil completo
+  // faixa do árbitro (quando já designado) — SÓ na aba Números; nas outras é ruído
   const arb = (SEM.arbitros || {})[String(fx.id)];
   const numBR = v => v != null ? String(v).replace(".", ",") : null;
-  const arbBar = arb && arb.nome ? `<button class="arb-bar click" onclick="state.arbJanela=10; state.arbEscopo='geral'; go('arbitro')">${svgIco("apito")} Árbitro: <b>${arb.nome}</b>${arb.amarelos != null ? ` · ${svgIco("cartaoAm")} ${numBR(arb.amarelos)} amarelos/jogo` : ""}${arb.faltas != null ? ` · ${numBR(arb.faltas)} faltas/jogo` : ""}${arb.jogos ? ` <span>(${arb.jogos} jogos na base)</span>` : ""}<span class="arb-go">ver perfil ›</span></button>` : "";
+  const arbBar = tab === "stats" && arb && arb.nome ? `<button class="arb-bar click" onclick="state.arbJanela=10; state.arbEscopo='geral'; go('arbitro')">${svgIco("apito")} Árbitro: <b>${arb.nome}</b>${arb.amarelos != null ? ` · ${svgIco("cartaoAm")} ${numBR(arb.amarelos)} amarelos/jogo` : ""}${arb.faltas != null ? ` · ${numBR(arb.faltas)} faltas/jogo` : ""}${arb.jogos ? ` <span>(${arb.jogos} jogos na base)</span>` : ""}<span class="arb-go">ver perfil ›</span></button>` : "";
 
   const raioxBloco = `${tabsRow}${arbBar}${filtrosRow}<div class="rx-card" style="margin-top:14px">${teamsHead}${corpo}</div>`;
 
@@ -5536,7 +5537,6 @@ function renderJogo(){
     <button class="back" onclick="go('oportunidades')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg> Jogos da semana</button>
     <p class="eyebrow">${fx.competicao} · ${fmtHorario(fx.kickoff)}</p>
     <h1 class="page">${fx.home} x ${fx.away}</h1>
-    <p class="sub">O raio-x completo da partida: médias dos times e de cada jogador. Clique num jogador pra ver o perfil.</p>
     ${raioxBloco}
     ${elencos}
     ${sourceNoteQI()}
@@ -5660,6 +5660,9 @@ function renderAoVivo(){
 }
 
 function render(){
+  // telas de DETALHE escondem a barra de busca mobile — menos empilhamento no topo
+  document.body.classList.toggle("tela-detalhe",
+    ["jogo", "jogador", "arbitro", "time"].includes(state.view));
   if (state.view==="oportunidades") renderOportunidades();
   else if (state.view==="jogador") renderJogadorSimples();
   else if (state.view==="jogo") renderJogo();
