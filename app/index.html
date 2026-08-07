@@ -928,7 +928,14 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
     background: var(--surface, rgba(255,255,255,0.05)); border: 1px solid var(--border, rgba(255,255,255,0.12));
     border-radius: 8px; color: inherit; font: 700 13.5px/1 inherit; font-family: inherit; padding: 12px; cursor: pointer; }
   .drawer-btn { display: inline-flex; align-items: center; gap: 7px; }
-  @media (min-width: 1150px){ .drawer, .drawer-overlay, .drawer-btn { display: none !important; } }
+  .ls-crest { display: inline-flex; width: 16px; justify-content: center; }
+  .ls-add { opacity: .7; }
+  .ls-add:hover { opacity: 1; }
+  .time-row .ls-pin { flex: none; font-size: 15px; cursor: pointer; opacity: .8; }
+  @media (min-width: 1150px){ .drawer, .drawer-overlay, .drawer-btn, .hamb { display: none !important; } }
+  .busca-modal { position: fixed; top: 6vh; left: 50%; transform: translateX(-50%); width: min(560px, 94vw);
+    max-height: 84vh; overflow-y: auto; z-index: 130; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 16px; box-shadow: var(--shadow); -webkit-overflow-scrolling: touch; }
   .qt-seqline { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700;
     padding: 8px 10px; background: var(--surface); border-left: 3px solid var(--acc); border-radius: 6px; margin-bottom: 6px; }
   .qt-seqline .ico { font-size: 14px; }
@@ -1084,6 +1091,9 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
 
 <header>
   <div class="wrap bar">
+    <button class="icon-btn hamb" onclick="toggleDrawer(true)" aria-label="Menu de competições" title="Competições e favoritos">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
     <div class="brand" onclick="go('oportunidades')" aria-label="Apitou — início">
       <svg width="32" height="32" viewBox="0 0 100 100" aria-hidden="true">
         <g transform="rotate(16 50 55)">
@@ -1110,6 +1120,9 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
       <button class="navbtn" id="nav-ranking" onclick="go('ranking')">Ranking</button>
     </nav>
     <div class="spacer"></div>
+    <button class="icon-btn" onclick="abrirBusca()" aria-label="Buscar" title="Buscar time, liga ou jogador">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    </button>
     <button class="icon-btn" id="themeBtn" onclick="toggleTheme()" aria-label="Alternar tema" title="Alternar tema">
       <svg id="themeIcon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></svg>
     </button>
@@ -1139,6 +1152,8 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
 </div></div>
 
 <div id="cardModal" style="display:none"></div>
+<div id="buscaModal" style="display:none"></div>
+<div id="drawerBox" style="display:none"></div>
 <div id="leadModal" style="display:none"></div>
 
 <div id="cookieBanner" class="cookie-banner" style="display:none">
@@ -2054,6 +2069,97 @@ function abrirTime(tid){
 function setTmJanela(n){ state.tmJanela = n; render(); }
 function setTmMando(m){ state.tmMando = m; render(); }
 function setTmChart(k){ state.tmChart = state.tmChart === k ? null : k; render(); }
+/* ----- times favoritos (estrela igual às ligas) ----- */
+function getFavTimes(){ try { return JSON.parse(localStorage.getItem("apitou-times-fav") || "[]"); } catch(e){ return []; } }
+function toggleFavTime(ev, tid){
+  ev.stopPropagation();
+  let f = getFavTimes();
+  f = f.includes(tid) ? f.filter(x => x !== tid) : [...f, tid];
+  localStorage.setItem("apitou-times-fav", JSON.stringify(f));
+  render();
+}
+function miniCrest(nome){
+  const u = SC_ASSETS.escudos?.[nome];
+  return u ? `<img src="${u}" style="width:16px; height:16px; border-radius:4px; object-fit:cover" onerror="this.style.display='none'">` : svgIco("escudo", 14);
+}
+
+/* ----- busca universal (modal estilo R10): times, ligas e jogadores ----- */
+function irLigaBusca(lid){ fecharBusca(); state.regiaoFiltro = "todos"; state.compFiltro = lid; go('oportunidades'); }
+function abrirBusca(){
+  state.buscaFiltro = state.buscaFiltro || "todos";
+  const box = document.getElementById("buscaModal");
+  box.style.display = "block";
+  box.innerHTML = `
+    <div class="drawer-overlay aberto" onclick="fecharBusca()" style="z-index:120"></div>
+    <div class="busca-modal">
+      <div class="drawer-head" style="padding:18px 18px 10px"><span>Procurar</span>
+        <button class="drawer-x" onclick="fecharBusca()">✕</button></div>
+      <div style="padding:0 18px">
+        <input class="times-busca" id="buscaInput" type="search" placeholder="Time, liga ou jogador…"
+          value="${(state.buscaQ || "").replace(/"/g, "&quot;")}" oninput="atualizarBusca(this.value)">
+        <div class="filters" id="buscaChips" style="margin-top:12px">${buscaChipsHTML()}</div>
+      </div>
+      <div id="buscaRes" style="padding:0 18px 20px">${buscaResHTML(state.buscaQ || "")}</div>
+    </div>`;
+  setTimeout(() => document.getElementById("buscaInput")?.focus(), 60);
+}
+function fecharBusca(){
+  const box = document.getElementById("buscaModal");
+  if (box){ box.style.display = "none"; box.innerHTML = ""; }
+}
+function buscaChipsHTML(){
+  return [["todos","Todos"],["times","Times"],["ligas","Ligas"],["jogadores","Jogadores"]]
+    .map(([k, txt]) => `<button class="chip ${ (state.buscaFiltro || "todos") === k ? "on" : ""}" onclick="setBuscaFiltro('${k}')">${txt}</button>`).join("");
+}
+function setBuscaFiltro(k){
+  state.buscaFiltro = k;
+  const chips = document.getElementById("buscaChips");
+  if (chips) chips.innerHTML = buscaChipsHTML();
+  const b = document.getElementById("buscaRes");
+  if (b) b.innerHTML = buscaResHTML(state.buscaQ || "");
+}
+function atualizarBusca(q){
+  state.buscaQ = q;
+  const b = document.getElementById("buscaRes");
+  if (b) b.innerHTML = buscaResHTML(q);
+}
+function buscaResHTML(q){
+  const nq = normTxt(q);
+  const filtro = state.buscaFiltro || "todos";
+  if (nq.length < 2) return `<div class="rx-sample" style="margin-top:14px">digite pelo menos 2 letras — os resultados aparecem na hora</div>`;
+  const favT = getFavTimes(), favL = getFavLigas();
+  const quer = k => filtro === "todos" || filtro === k;
+  const ligas = quer("ligas") ? Object.entries(SEM.ligas || {})
+    .map(([lid, c]) => ({ lid: +lid, nome: c.nome }))
+    .filter(l => l.nome && normTxt(l.nome).includes(nq)).slice(0, filtro === "ligas" ? 20 : 5) : [];
+  const times = quer("times") ? Object.values(TIME_INDEX).filter(t => normTxt(t.nome).includes(nq)).slice(0, filtro === "times" ? 30 : 6) : [];
+  const jogs = quer("jogadores") ? JOGADORES_REAIS.filter(j => normTxt(j.name).includes(nq)).slice(0, filtro === "jogadores" ? 30 : 6) : [];
+  const sec = (titulo, rows) => rows ? `<div class="section-h" style="margin-top:14px"><span class="lbl">${titulo}</span></div><div>${rows}</div>` : "";
+  const rTimes = times.map(t => `<button class="time-row" style="width:100%; margin-top:6px" onclick="fecharBusca(); abrirTime(${t.tid})">
+      ${teamCrest(t.nome)}<span class="tr-nm">${t.nome}</span>
+      <span class="tr-ligas">${[...t.ligas].slice(0,2).map(l => bandeiraDe(l)).join("")}</span>
+      <span class="ls-pin ${favT.includes(t.tid) ? "on" : ""}" onclick="toggleFavTimeBusca(event, ${t.tid})">${favT.includes(t.tid) ? "★" : "☆"}</span>
+    </button>`).join("");
+  const rLigas = ligas.map(l => `<button class="time-row" style="width:100%; margin-top:6px" onclick="irLigaBusca(${l.lid})">
+      <span style="font-size:17px">${bandeiraDe(l.lid)}</span><span class="tr-nm">${l.nome}</span>
+      <span class="ls-pin ${favL.includes(l.lid) ? "on" : ""}" onclick="event.stopPropagation(); toggleFavLiga(event, ${l.lid}); setBuscaFiltro(state.buscaFiltro)">${favL.includes(l.lid) ? "★" : "☆"}</span>
+    </button>`).join("");
+  const rJogs = jogs.map(j => `<button class="time-row" style="width:100%; margin-top:6px" onclick="fecharBusca(); abrirJogador(${j.fi}, '${j.side}', ${j.idx})">
+      <span class="crest" style="width:32px; height:32px; border-radius:8px; overflow:hidden; display:grid; place-items:center; font-size:11px; flex:none">${fotoOuIniciais(j.name)}</span>
+      <span class="tr-nm">${j.name} <span style="color:var(--muted); font-size:11.5px">· ${j.team}</span></span>
+      <span class="tr-ligas" style="font-size:11px">${j.pos || ""}</span>
+    </button>`).join("");
+  const html = sec("Times", rTimes) + sec("Ligas", rLigas) + sec("Jogadores", rJogs);
+  return html || `<div class="empty-box" style="margin-top:16px">Nada com esse nome — confere a grafia?</div>`;
+}
+function toggleFavTimeBusca(ev, tid){
+  ev.stopPropagation();
+  let f = getFavTimes();
+  f = f.includes(tid) ? f.filter(x => x !== tid) : [...f, tid];
+  localStorage.setItem("apitou-times-fav", JSON.stringify(f));
+  setBuscaFiltro(state.buscaFiltro || "todos");
+}
+
 function filtrarTimes(q){
   state.timesQ = q;
   const box = document.getElementById("listaTimes");
@@ -2066,14 +2172,17 @@ function listaTimesHTML(q){
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt"));
   const G = { br: [], am: [], eu: [] };
   todos.forEach(t => (G[regiaoTime(t)] || G.eu).push(t));
+  const favs = getFavTimes();
   const linhaTime = t => `<button class="time-row" onclick="abrirTime(${t.tid})">
       ${teamCrest(t.nome)}<span class="tr-nm">${t.nome}</span>
       <span class="tr-ligas">${[...t.ligas].slice(0, 3).map(l => bandeiraDe(l)).join("")}</span>
+      <span class="ls-pin ${favs.includes(t.tid) ? "on" : ""}" onclick="toggleFavTime(event, ${t.tid})" title="${favs.includes(t.tid) ? "Remover dos favoritos" : "Favoritar time"}">${favs.includes(t.tid) ? "★" : "☆"}</span>
     </button>`;
   const secao = (titulo, arr) => arr.length ? `
     <div class="section-h" style="margin-top:20px"><span class="lbl">${titulo}</span><span class="count tnum">${arr.length} times</span></div>
     <div class="times-grid">${arr.map(linhaTime).join("")}</div>` : "";
-  const html = secao("🇧🇷 Brasil", G.br) + secao(`${svgIco("mundo")} Américas`, G.am) + secao("🇪🇺 Europa", G.eu);
+  const meus = todos.filter(t => favs.includes(t.tid));
+  const html = secao(`${svgIco("estrela")} Meus times`, meus) + secao("🇧🇷 Brasil", G.br) + secao(`${svgIco("mundo")} Américas`, G.am) + secao("🇪🇺 Europa", G.eu);
   return html || `<div class="empty-box" style="margin-top:16px">Nenhum time com esse nome na base.</div>`;
 }
 function renderTimes(){
@@ -2256,7 +2365,7 @@ function renderTime(){
     <div class="phead">
       ${teamCrest(t.nome)}
       <div style="flex:1; min-width:200px">
-        <h1>${t.nome}</h1>
+        <h1>${t.nome} <span class="ls-pin ${getFavTimes().includes(tid) ? "on" : ""}" style="font-size:22px; cursor:pointer; vertical-align:2px" onclick="toggleFavTime(event, ${tid})" title="Favoritar time">${getFavTimes().includes(tid) ? "★" : "☆"}</span></h1>
         <div class="pmeta">${[...t.ligas].map(l => `<span class="badge">${bandeiraDe(l)} ${ligaInfo(l).nome || ""}</span>`).join(" ")}</div>
       </div>
     </div>
@@ -2428,7 +2537,48 @@ if (location.search.includes("paletas")){
 
 function setRegiao(r){ state.regiaoFiltro = r; state.compFiltro = null; state.drawerAberto = false; render(); }
 function setCompFiltro(lid){ state.compFiltro = lid; state.drawerAberto = false; render(); }
-function toggleDrawer(aberto){ state.drawerAberto = aberto; render(); }
+/* drawer GLOBAL: funciona em qualquer tela (hambúrguer no topo + botão da home) */
+function drawerConteudoHTML(){
+  const porLiga = new Map();
+  FIXTURES.forEach(fx => {
+    if (!porLiga.has(fx.ligaId)) porLiga.set(fx.ligaId, { nome: fx.competicao, n: 0, regiao: regiaoDe(fx.ligaId) });
+    porLiga.get(fx.ligaId).n++;
+  });
+  const favs = getFavLigas();
+  const item = (lid, c) => `<button class="ls-item ${state.compFiltro===lid?'on':''}" onclick="irLigaBusca(${lid}); toggleDrawer(false)">
+      <span>${bandeiraDe(lid)}</span><span class="ls-nm">${c.nome}</span><span class="n tnum">${c.n}</span>
+      <span class="ls-pin ${favs.includes(lid)?'on':''}" onclick="toggleFavLiga(event, ${lid}); toggleDrawer(true)">${favs.includes(lid)?'★':'☆'}</span>
+    </button>`;
+  const todas = [...porLiga.entries()];
+  const blocos = [];
+  const fixadas = todas.filter(([lid]) => favs.includes(lid));
+  if (fixadas.length)
+    blocos.push(`<div class="ls-h">${svgIco("estrela")} Ligas fixadas</div>` + fixadas.map(([l, c]) => item(l, c)).join(""));
+  const favT = getFavTimes().map(x => TIME_INDEX[x]).filter(Boolean);
+  blocos.push(`<div class="ls-h">${svgIco("escudo")} Times favoritos</div>` +
+    favT.map(t => `<button class="ls-item" onclick="toggleDrawer(false); abrirTime(${t.tid})"><span class="ls-crest">${miniCrest(t.nome)}</span><span class="ls-nm">${t.nome}</span></button>`).join("") +
+    `<button class="ls-item ls-add" onclick="toggleDrawer(false); go('times')"><span>＋</span><span class="ls-nm">Adicionar time</span></button>`);
+  for (const [reg, titulo] of [["br","🇧🇷 Brasil"],["am",`${svgIco("mundo")} Américas`],["eu","🇪🇺 Europa"]]){
+    const doReg = todas.filter(([lid, c]) => c.regiao === reg && !favs.includes(lid)).sort((a, b) => b[1].n - a[1].n);
+    if (doReg.length) blocos.push(`<div class="ls-h">${titulo}</div>` + doReg.map(([l, c]) => item(l, c)).join(""));
+  }
+  return blocos.join("");
+}
+function toggleDrawer(aberto){
+  state.drawerAberto = aberto;
+  const box = document.getElementById("drawerBox");
+  if (!box) return;
+  if (!aberto){ box.style.display = "none"; box.innerHTML = ""; return; }
+  box.style.display = "block";
+  box.innerHTML = `
+    <div class="drawer-overlay aberto" onclick="toggleDrawer(false)"></div>
+    <div class="drawer aberto">
+      <div class="drawer-head"><span>${svgIco("trofeu")} Competições</span>
+        <button class="drawer-x" onclick="toggleDrawer(false)">✕</button></div>
+      ${drawerConteudoHTML()}
+      <button class="drawer-times" onclick="toggleDrawer(false); go('times')">${svgIco("escudo")} Ver todos os times →</button>
+    </div>`;
+}
 /* ligas fixadas pelo usuário (persistem no navegador) */
 function getFavLigas(){
   try { return JSON.parse(localStorage.getItem("apitou-ligas-fav") || "[]"); } catch(e){ return []; }
@@ -2524,11 +2674,16 @@ function renderOportunidades(){
     </button>`;
   const compsAll = [...porCompAll.entries()];
   const fixadas = compsAll.filter(([lid]) => favs.includes(lid));
-  let sideHTML = "", drawerHTML = "";
+  let sideHTML = "";
   if (compsAll.length > 1){
     const blocos = [];
     if (fixadas.length)
       blocos.push(`<div class="ls-h">${svgIco("estrela")} Ligas fixadas</div>` + fixadas.map(([lid, c]) => lsItem(lid, c)).join(""));
+    // times favoritos (estrela na aba Times) — acesso de 1 toque ao raio-x do clube
+    const favT = getFavTimes().map(x => TIME_INDEX[x]).filter(Boolean);
+    blocos.push(`<div class="ls-h">${svgIco("escudo")} Times favoritos</div>` +
+      favT.map(t => `<button class="ls-item" onclick="abrirTime(${t.tid})"><span class="ls-crest">${miniCrest(t.nome)}</span><span class="ls-nm">${t.nome}</span></button>`).join("") +
+      `<button class="ls-item ls-add" onclick="go('times')"><span>＋</span><span class="ls-nm">Adicionar time</span></button>`);
     for (const [reg, titulo] of [["br","🇧🇷 Brasil"],["am",`${svgIco("mundo")} Américas`],["eu","🇪🇺 Europa"]]){
       const doReg = compsAll.filter(([lid, c]) => c.regiao === reg && !favs.includes(lid))
                             .sort((a, b) => b[1].n - a[1].n);
@@ -2536,23 +2691,6 @@ function renderOportunidades(){
         blocos.push(`<div class="ls-h">${titulo}</div>` + doReg.map(([lid, c]) => lsItem(lid, c)).join(""));
     }
     sideHTML = `<aside class="liga-side">${blocos.join("")}</aside>`;
-    // mobile: mesmo conteúdo do sidebar, num painel lateral deslizante
-    drawerHTML = `
-    <div class="drawer-overlay ${state.drawerAberto ? "aberto" : ""}" onclick="toggleDrawer(false)"></div>
-    <div class="drawer ${state.drawerAberto ? "aberto" : ""}">
-      <div class="drawer-head">
-        <span>${svgIco("trofeu")} Competições</span>
-        <button class="drawer-x" onclick="toggleDrawer(false)">✕</button>
-      </div>
-      <div class="filters" style="padding:0 14px 10px">
-        ${[["todos", "Tudo"],["br","🇧🇷 Brasil"],["eu","🇪🇺 Europa"],["am","Américas"]].map(([k, txt]) =>
-          `<button class="chip ${regiao===k?'on':''}" onclick="setRegiao('${k}')">${txt}</button>`).join("")}
-      </div>
-      ${blocos.join("")}
-      <button class="drawer-times" onclick="toggleDrawer(false); go('times')">
-        ${svgIco("escudo")} Ver todos os times →
-      </button>
-    </div>`;
   }
 
   const chipD = (k, txt) => `<button class="chip ${filtro===k?'on':''}" onclick="setDiaFiltro('${k}')">${txt}</button>`;
@@ -2592,7 +2730,6 @@ function renderOportunidades(){
     ${sourceNoteQI()}
     </div>
   </div>
-  ${drawerHTML}
   `;
 }
 const rotulosFiltro = { hoje: "hoje", amanha: "amanhã", depois: "depois de amanhã" };
