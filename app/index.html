@@ -735,6 +735,31 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
 
   /* ---------- abas da tela do jogo (Números / Confronto / Quentes) ---------- */
   .jogo-tabs { display: flex; margin: 18px 0 4px; border-bottom: 1px solid var(--border-soft); }
+  /* tabela de classificação (aba do jogo) — os dois clubes ganham destaque */
+  .classif-wrap { margin-top: 14px; overflow-x: auto; }
+  .classif-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .classif-table th { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted); padding: 6px 8px; text-align: center;
+    border-bottom: 1px solid var(--border-soft); }
+  .classif-table td { padding: 8px; text-align: center; border-bottom: 1px solid var(--border-soft); }
+  .classif-table tbody tr:last-child td { border-bottom: 0; }
+  .cl-pos { color: var(--muted); font-weight: 700; width: 30px; }
+  .cl-time { text-align: left !important; display: flex; align-items: center; gap: 8px; min-width: 150px; }
+  .cl-time .crest { width: 22px; height: 22px; border-radius: 6px; flex: none; display: grid; place-items: center; font-size: 8px; }
+  .cl-nm { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+  .cl-pts { font-weight: 800; color: var(--text); }
+  .cl-sg { color: var(--text-dim); }
+  .cl-hl td { background: var(--surface-2); }
+  .cl-hl-home td:first-child { box-shadow: inset 3px 0 0 var(--acc); }
+  .cl-hl-away td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
+  .cl-hl .cl-nm { color: var(--text); font-weight: 800; }
+  @media (max-width: 560px){
+    .classif-table { font-size: 12.5px; }
+    .classif-table td, .classif-table th { padding: 7px 5px; }
+    .cl-time { min-width: 118px; }
+    .cl-nm { max-width: 104px; }
+    .cl-time .crest { width: 18px; height: 18px; }
+  }
   .jogo-tab {
     appearance: none; border: 0; background: transparent; cursor: pointer; flex: 1;
     font-family: var(--f-ui); font-weight: 700; font-size: 14px; color: var(--muted);
@@ -4945,6 +4970,44 @@ function quentesCorpo(fx, escopo, fi){
 
 /* ---------- ESCALAÇÕES: campinho (provável = último XI + desfalques oficiais) ---------- */
 function normNome(s){ return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim(); }
+/* ----- aba Classificação: tabela da liga com os dois clubes do jogo destacados ----- */
+function classifCorpo(fx){
+  const bruto = (SEM.classificacao || {})[String(fx.ligaId)];
+  if (!bruto || !bruto.length) return `<div class="empty-box" style="margin-top:14px">Sem tabela de classificação nesta competição.</div>`;
+  // ligas com múltiplas fases/grupos (Apertura/Clausura, zonas): cada (fase, grupo)
+  // é uma tabela — mostra a que contém os clubes do jogo; empate → fase mais recente
+  const parts = new Map();
+  for (const r of bruto){
+    const k = `${r.st || 0}:${r.g || 0}`;
+    if (!parts.has(k)) parts.set(k, []);
+    parts.get(k).push(r);
+  }
+  let tab = null, melhor = -1;
+  for (const arr of parts.values()){
+    const temJogo = arr.some(r => r.tid === fx.homeId || r.tid === fx.awayId) ? 1 : 0;
+    const score = temJogo * 1e15 + (arr[0].st || 0) * 10 + arr.length / 1000;
+    if (score > melhor){ melhor = score; tab = arr; }
+  }
+  tab = [...tab].sort((a, b) => (a.pos || 999) - (b.pos || 999));
+  const linhas = tab.map(r => {
+    const hl = r.tid === fx.homeId ? "home" : r.tid === fx.awayId ? "away" : "";
+    return `<tr class="${hl ? "cl-hl cl-hl-" + hl : ""}">
+      <td class="cl-pos tnum">${r.pos ?? "–"}</td>
+      <td class="cl-time">${teamCrest(r.nome)}<span class="cl-nm">${r.nome}</span>${hl ? `<span class="rx-dot ${hl}" style="margin-left:6px"></span>` : ""}</td>
+      <td class="cl-pts tnum">${r.pts ?? "–"}</td>
+      <td class="tnum">${r.j ?? "–"}</td><td class="tnum">${r.v ?? "–"}</td>
+      <td class="tnum">${r.e ?? "–"}</td><td class="tnum">${r.d ?? "–"}</td>
+      <td class="tnum cl-sg">${r.sg == null ? "–" : r.sg > 0 ? "+" + r.sg : r.sg}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="classif-wrap">
+    <table class="classif-table">
+      <thead><tr><th>#</th><th style="text-align:left">Time</th><th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th></tr></thead>
+      <tbody>${linhas}</tbody>
+    </table>
+    <div class="rx-sample" style="margin-top:10px">${fx.competicao} · tabela atualizada na última coleta</div>
+  </div>`;
+}
 function escalacoesCorpo(fx, fi){
   const dataBR = ts => { const [y,m,d] = (ts||"").split("-"); return d ? `${d}/${m}/${y.slice(2)}` : ""; };
   const desfalques = (SEM.escalacoes?.desfalques || {})[String(fx.id)] || [];
@@ -5168,7 +5231,8 @@ function renderJogo(){
 
   // ----- Abas grandes: a pergunta que o usuário tem na cabeça -----
   const tabBtn = (k, txt) => `<button class="jogo-tab ${tab===k?'on':''}" onclick="setJogoTab('${k}')">${txt}</button>`;
-  const tabsRow = `<div class="jogo-tabs">${tabBtn("stats",`${svgIco("grafico")} Números`)}${tabBtn("h2h",`${svgIco("versus")} Confronto`)}${tabBtn("quentes",`${svgIco("chama")} Quentes`)}${tabBtn("esc",`${svgIco("prancheta")} Escalações`)}</div>`;
+  const temClassif = !!(SEM.classificacao || {})[String(fx.ligaId)];
+  const tabsRow = `<div class="jogo-tabs">${tabBtn("stats",`${svgIco("grafico")} Números`)}${tabBtn("h2h",`${svgIco("versus")} Confronto`)}${tabBtn("quentes",`${svgIco("chama")} Quentes`)}${temClassif ? tabBtn("classif",`${svgIco("trofeu")} Classificação`) : ""}${tabBtn("esc",`${svgIco("prancheta")} Escalações`)}</div>`;
 
   // ----- Filtros com rótulo-pergunta (só os que fazem sentido na aba) -----
   const labelComp = ehContinental ? "Só continentais" : `Só ${fx.competicao}`;
@@ -5193,7 +5257,7 @@ function renderJogo(){
       <optgroup label="Disciplina"><option value="faltas">Faltas cometidas</option><option value="amarelos">Cartões amarelos</option><option value="vermelhos">Cartões vermelhos</option></optgroup>
       <optgroup label="Controle"><option value="posse">Posse de bola</option><option value="laterais">Arremessos laterais</option><option value="tiroMeta">Tiros de meta</option></optgroup>
     </select></div>`;
-  const filtrosRow = tab === "esc" ? "" : `<div class="jogo-filtros">${tab === "stats" ? grupoJanela : ""}${grupoEscopo}${tab === "stats" ? grupoMando : ""}${tab === "stats" ? grupoStat : ""}</div>`;
+  const filtrosRow = (tab === "esc" || tab === "classif") ? "" : `<div class="jogo-filtros">${tab === "stats" ? grupoJanela : ""}${grupoEscopo}${tab === "stats" ? grupoMando : ""}${tab === "stats" ? grupoStat : ""}</div>`;
 
   // no modo clube único (mando), o cabeçalho mostra SÓ o clube filtrado — os dois
   // escudos juntos faziam a coluna esquerda parecer do mandante
@@ -5209,7 +5273,7 @@ function renderJogo(){
   })() : `
     <div class="rx-teams-head">
       <div class="rx-team">${teamCrest(fx.home)}<span class="tn">${fx.home}</span><span class="rx-dot home"></span></div>
-      <span class="rx-vs">${tab === "h2h" ? "confronto direto" : tab === "quentes" ? "forma recente" : tab === "esc" ? "escalações" : "média por jogo"}</span>
+      <span class="rx-vs">${tab === "h2h" ? "confronto direto" : tab === "quentes" ? "forma recente" : tab === "esc" ? "escalações" : tab === "classif" ? "classificação" : "média por jogo"}</span>
       <div class="rx-team away"><span class="rx-dot away"></span><span class="tn">${fx.away}</span>${teamCrest(fx.away)}</div>
     </div>`;
 
@@ -5221,6 +5285,8 @@ function renderJogo(){
     corpo = quentesCorpo(fx, state.rxEscopo, fi);
   } else if (tab === "esc"){
     corpo = escalacoesCorpo(fx, fi);
+  } else if (tab === "classif"){
+    corpo = classifCorpo(fx);
   } else {
     // mando estilo FlashScore: Todos | {mandante} · casa | {visitante} · fora
     // modo clube único: só os números DAQUELE clube, comparados com a média geral dele
