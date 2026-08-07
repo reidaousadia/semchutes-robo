@@ -1890,9 +1890,38 @@ function go(view, playerId, qiFixture, qiPlayer, jogoIdx){
   }
   if (view !== "aovivo") pausarSimulacao();
   window.scrollTo({ top:0, behavior: prefersReduced() ? "auto":"smooth" });
+  if (!histMudo) history.pushState(navSnapshot(), "");
   render();
 }
 function prefersReduced(){ return window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
+
+/* ---------- botão VOLTAR do celular = voltar de tela DENTRO do app ----------
+   cada go() empurra uma entrada no histórico do navegador; popstate restaura o
+   snapshot — sem isso o back físico jogava o usuário pra fora do site */
+let histMudo = false;
+function navSnapshot(){
+  return { view: state.view, playerId: state.playerId, qiFixture: state.qiFixture,
+    qiPlayer: state.qiPlayer, jogoAberto: state.jogoAberto, timeAberto: state.timeAberto,
+    j2: state.j2, jogoTab: state.jogoTab, _prevView: typeof prevView !== "undefined" ? prevView : null };
+}
+addEventListener("popstate", e => {
+  // overlays fecham primeiro (busca, drawer, card) — igual app nativo
+  const busca = document.getElementById("buscaModal");
+  if (busca && busca.style.display !== "none" && busca.innerHTML) { try { fecharBusca(); } catch(_){} }
+  try { toggleDrawer(false); } catch(_){}
+  try { fecharCard(); } catch(_){}
+  const s = e.state;
+  if (!s || !s.view) return;
+  histMudo = true;
+  try {
+    Object.assign(state, { view: s.view, playerId: s.playerId, qiFixture: s.qiFixture,
+      qiPlayer: s.qiPlayer, jogoAberto: s.jogoAberto, timeAberto: s.timeAberto,
+      j2: s.j2, jogoTab: s.jogoTab });
+    if (s._prevView) prevView = s._prevView;
+    go(s.view);
+  } finally { histMudo = false; }
+});
+addEventListener("load", () => { try { history.replaceState(navSnapshot(), ""); } catch(_){} });
 
 /* ---------- filter chips (competições reais da semana) ---------- */
 function leagueChips(){
