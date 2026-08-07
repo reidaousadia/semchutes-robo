@@ -737,7 +737,7 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   .jogo-tabs { display: flex; margin: 18px 0 4px; border-bottom: 1px solid var(--border-soft); }
   /* tabela de classificação (aba do jogo) — os dois clubes ganham destaque */
   .classif-wrap { margin-top: 14px; overflow-x: auto; }
-  .classif-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .classif-table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 13.5px; }
   .classif-table th { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.08em;
     text-transform: uppercase; color: var(--muted); padding: 6px 8px; text-align: center;
     border-bottom: 1px solid var(--border-soft); }
@@ -753,12 +753,15 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   .cl-hl-home td:first-child { box-shadow: inset 3px 0 0 var(--acc); }
   .cl-hl-away td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
   .cl-hl .cl-nm { color: var(--text); font-weight: 800; }
+  .cl-gols { color: var(--text-dim); white-space: nowrap; }
   @media (max-width: 560px){
-    .classif-table { font-size: 12.5px; }
-    .classif-table td, .classif-table th { padding: 7px 5px; }
-    .cl-time { min-width: 118px; }
-    .cl-nm { max-width: 104px; }
-    .cl-time .crest { width: 18px; height: 18px; }
+    .classif-table { font-size: 12.5px; table-layout: auto; }
+    .classif-table td, .classif-table th { padding: 8px 4px; }
+    .cl-md { display: none; }               /* V/E/D somem: nome ganha o espaço */
+    .cl-time { min-width: 0; }
+    .cl-nm { max-width: 32vw; }
+    .cl-time .crest { width: 20px; height: 20px; }
+    .cl-pos { width: 22px; }
   }
   .jogo-tab {
     appearance: none; border: 0; background: transparent; cursor: pointer; flex: 1;
@@ -4989,20 +4992,24 @@ function classifCorpo(fx){
     if (score > melhor){ melhor = score; tab = arr; }
   }
   tab = [...tab].sort((a, b) => (a.pos || 999) - (b.pos || 999));
+  // estilo FlashScore: tudo numa tela só — no mobile V/E/D somem e sobra espaço pro nome
   const linhas = tab.map(r => {
     const hl = r.tid === fx.homeId ? "home" : r.tid === fx.awayId ? "away" : "";
     return `<tr class="${hl ? "cl-hl cl-hl-" + hl : ""}">
       <td class="cl-pos tnum">${r.pos ?? "–"}</td>
       <td class="cl-time">${teamCrest(r.nome)}<span class="cl-nm">${r.nome}</span>${hl ? `<span class="rx-dot ${hl}" style="margin-left:6px"></span>` : ""}</td>
-      <td class="cl-pts tnum">${r.pts ?? "–"}</td>
-      <td class="tnum">${r.j ?? "–"}</td><td class="tnum">${r.v ?? "–"}</td>
-      <td class="tnum">${r.e ?? "–"}</td><td class="tnum">${r.d ?? "–"}</td>
+      <td class="tnum">${r.j ?? "–"}</td>
+      <td class="tnum cl-md">${r.v ?? "–"}</td>
+      <td class="tnum cl-md">${r.e ?? "–"}</td>
+      <td class="tnum cl-md">${r.d ?? "–"}</td>
+      <td class="tnum cl-gols">${r.gp ?? "–"}:${r.gc ?? "–"}</td>
       <td class="tnum cl-sg">${r.sg == null ? "–" : r.sg > 0 ? "+" + r.sg : r.sg}</td>
+      <td class="cl-pts tnum">${r.pts ?? "–"}</td>
     </tr>`;
   }).join("");
   return `<div class="classif-wrap">
     <table class="classif-table">
-      <thead><tr><th>#</th><th style="text-align:left">Time</th><th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th></tr></thead>
+      <thead><tr><th>#</th><th style="text-align:left">Time</th><th>J</th><th class="cl-md">V</th><th class="cl-md">E</th><th class="cl-md">D</th><th>Gols</th><th>SG</th><th>P</th></tr></thead>
       <tbody>${linhas}</tbody>
     </table>
     <div class="rx-sample" style="margin-top:10px">${fx.competicao} · tabela atualizada na última coleta</div>
