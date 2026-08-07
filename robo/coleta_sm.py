@@ -534,6 +534,7 @@ for lid, sid in sid_por_liga.items():
         for dd in r.get("details", []):
             det[((dd.get("type") or {}).get("developer_name") or "")] = dd.get("value")
         tab.append({"tid": r.get("participant_id"), "pos": r.get("position"),
+                    "st": r.get("stage_id"), "g": r.get("group_id"),
                     "nome": (r.get("participant") or {}).get("name"),
                     "pts": r.get("points"), "j": det.get("OVERALL_MATCHES"),
                     "v": det.get("OVERALL_WINS"), "e": det.get("OVERALL_DRAWS"),
