@@ -1609,23 +1609,22 @@ const TEND_VAL = {
   cartoes:   j => (j.own.amarelos != null && j.adv.amarelos != null)
                ? j.own.amarelos + j.adv.amarelos + (j.own.vermelhos || 0) + (j.adv.vermelhos || 0) : null,
   faltas:    j => soma2(j.own.faltas, j.adv.faltas),
-  fin:       j => soma2(j.own.fin, j.adv.fin),
-  chutesGol: j => soma2(j.own.chutesGol, j.adv.chutesGol),
-  defesas:   j => soma2(j.own.defesas, j.adv.defesas),
-  laterais:  j => soma2(j.own.laterais, j.adv.laterais),
-  tiroMeta:  j => soma2(j.own.tiroMeta, j.adv.tiroMeta),
+  // finalizações / chutes a gol / defesas: POR TIME — é assim que a casa oferece
+  // (linha de time ~10,5 fin; total da partida 20+ não existe no mercado — Pedro 07/08)
+  fin:       j => j.own.fin ?? null,
+  chutesGol: j => j.own.chutesGol ?? null,
+  defesas:   j => j.own.defesas ?? null,
 };
 const TEND_DEFS = (() => {
+  // SÓ mercados que existem nas casas brasileiras, nas linhas que elas realmente abrem
   const mercados = [
     ["gols", "gols na partida", [1.5, 2.5, 3.5]],
     ["cantos", "escanteios", [7.5, 8.5, 9.5, 10.5]],
     ["cartoes", "cartões", [2.5, 3.5, 4.5, 5.5]],
     ["faltas", "faltas na partida", [22.5, 24.5, 26.5]],
-    ["fin", "finalizações na partida", [20.5, 23.5, 26.5]],
-    ["chutesGol", "chutes a gol na partida", [7.5, 8.5, 9.5]],
-    ["defesas", "defesas de goleiro", [5.5, 6.5, 7.5]],
-    ["laterais", "arremessos laterais", [34.5, 38.5, 42.5]],
-    ["tiroMeta", "tiros de meta", [12.5, 14.5, 16.5]],
+    ["fin", "finalizações do time", [8.5, 10.5, 12.5]],
+    ["chutesGol", "chutes a gol do time", [2.5, 3.5, 4.5]],
+    ["defesas", "defesas do goleiro", [2.5, 3.5, 4.5]],
   ];
   const fmtL = L => String(L).replace(".", ",");
   const defs = [];
