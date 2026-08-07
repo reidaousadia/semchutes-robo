@@ -736,7 +736,8 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   /* ---------- abas da tela do jogo (Números / Confronto / Quentes) ---------- */
   .jogo-tabs { display: flex; margin: 18px 0 8px; border-bottom: 1px solid var(--border-soft);
     background: var(--surface); border: 1px solid var(--border-soft); border-radius: 12px;
-    padding: 0 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    padding: 0 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    touch-action: pan-x; overscroll-behavior-x: contain; }  /* arrasto SÓ lateral — sem subir/descer junto */
   .jogo-tabs::-webkit-scrollbar { display: none; }
   /* tabela de classificação (aba do jogo) — os dois clubes ganham destaque */
   .classif-wrap { margin-top: 14px; overflow-x: auto; }
@@ -4465,9 +4466,10 @@ function renderJogadorSimples(){
                      ["ds","Desarmes",1],["ps","Passes",0],["am","Cartões",2],["m","Minutos",0]];
     const statSel = state.jgStat && PJ_ROWS.some(r => r[0] === state.jgStat) ? state.jgStat : "f";
     const metaSel = PJ_ROWS.find(r => r[0] === statSel);
-    const tabsStat = `<div class="filters" style="margin-top:18px">${PJ_ROWS
+    // mesmo padrão de abas do raio-x do jogo (faixa FlashScore) — pedido do Pedro 07/08
+    const tabsStat = `<div class="jogo-tabs" style="margin-top:18px">${PJ_ROWS
       .filter(([k]) => hist.some(g => g[k] != null))
-      .map(([k, lbl]) => `<button class="chip ${statSel===k?'on':''}" onclick="setJgStat('${k}')">${lbl}</button>`).join("")}</div>`;
+      .map(([k, lbl]) => `<button class="jogo-tab ${statSel===k?'on':''}" onclick="setJgStat('${k}')">${lbl}</button>`).join("")}</div>`;
     const vsChart = [...hist].reverse();  // esquerda = mais antigo
     const valsC = vsChart.map(g => g[statSel]).filter(v => v != null);
     const maxC = Math.max(...valsC, 0.001);
