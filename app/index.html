@@ -936,6 +936,15 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   .busca-modal { position: fixed; top: 6vh; left: 50%; transform: translateX(-50%); width: min(560px, 94vw);
     max-height: 84vh; overflow-y: auto; z-index: 130; background: var(--bg); border: 1px solid var(--border);
     border-radius: 16px; box-shadow: var(--shadow); -webkit-overflow-scrolling: touch; }
+  /* barra de busca escrita no header (desktop); no mobile vira só a lupa */
+  .header-busca { display: none; }
+  @media (min-width: 760px){
+    .header-busca { display: inline-flex; align-items: center; gap: 8px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 999px; color: var(--muted);
+      font: 500 13px/1 var(--f-ui); padding: 10px 16px; min-width: 250px; cursor: pointer; }
+    .header-busca:hover { border-color: var(--acc); color: var(--text-dim); }
+    .so-mobile { display: none !important; }
+  }
   .qt-seqline { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700;
     padding: 8px 10px; background: var(--surface); border-left: 3px solid var(--acc); border-radius: 6px; margin-bottom: 6px; }
   .qt-seqline .ico { font-size: 14px; }
@@ -1120,7 +1129,11 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
       <button class="navbtn" id="nav-ranking" onclick="go('ranking')">Ranking</button>
     </nav>
     <div class="spacer"></div>
-    <button class="icon-btn" onclick="abrirBusca()" aria-label="Buscar" title="Buscar time, liga ou jogador">
+    <button class="header-busca" onclick="abrirBusca()" aria-label="Buscar">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      Pesquisar time, liga ou jogador…
+    </button>
+    <button class="icon-btn so-mobile" onclick="abrirBusca()" aria-label="Buscar" title="Buscar time, liga ou jogador">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
     </button>
     <button class="icon-btn" id="themeBtn" onclick="toggleTheme()" aria-label="Alternar tema" title="Alternar tema">
@@ -2165,24 +2178,60 @@ function filtrarTimes(q){
   const box = document.getElementById("listaTimes");
   if (box) box.innerHTML = listaTimesHTML(q);
 }
+function ligaPrimaria(t){
+  const ls = [...t.ligas];
+  const rank = l => { const i = ligaInfo(l) || {}; return i.tipo === "liga" ? 0 : i.tipo === "copa" ? 1 : 2; };
+  ls.sort((a, b) => rank(a) - rank(b));
+  return ls[0];
+}
+function bandeirasExtras(t, primaria){
+  // bandeiras únicas das OUTRAS competições (sem repetir a da seção)
+  const base = bandeiraDe(primaria);
+  const vistas = new Set([base]);
+  const out = [];
+  for (const l of t.ligas){
+    const b = bandeiraDe(l);
+    if (!vistas.has(b)){ vistas.add(b); out.push(b); }
+  }
+  return out.slice(0, 2).join("");
+}
 function listaTimesHTML(q){
   const nq = normTxt(q);
   const todos = Object.values(TIME_INDEX)
     .filter(t => !nq || normTxt(t.nome).includes(nq))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt"));
-  const G = { br: [], am: [], eu: [] };
-  todos.forEach(t => (G[regiaoTime(t)] || G.eu).push(t));
   const favs = getFavTimes();
-  const linhaTime = t => `<button class="time-row" onclick="abrirTime(${t.tid})">
+  const linhaTime = t => {
+    const prim = ligaPrimaria(t);
+    return `<button class="time-row" onclick="abrirTime(${t.tid})">
       ${teamCrest(t.nome)}<span class="tr-nm">${t.nome}</span>
-      <span class="tr-ligas">${[...t.ligas].slice(0, 3).map(l => bandeiraDe(l)).join("")}</span>
+      <span class="tr-ligas">${bandeirasExtras(t, prim)}</span>
       <span class="ls-pin ${favs.includes(t.tid) ? "on" : ""}" onclick="toggleFavTime(event, ${t.tid})" title="${favs.includes(t.tid) ? "Remover dos favoritos" : "Favoritar time"}">${favs.includes(t.tid) ? "★" : "☆"}</span>
     </button>`;
+  };
   const secao = (titulo, arr) => arr.length ? `
     <div class="section-h" style="margin-top:20px"><span class="lbl">${titulo}</span><span class="count tnum">${arr.length} times</span></div>
     <div class="times-grid">${arr.map(linhaTime).join("")}</div>` : "";
+
+  // agrupa por LIGA principal do time (Brasileirão, Série B... depois Américas, depois Europa)
+  const porLiga = new Map();
+  for (const t of todos){
+    const lid = ligaPrimaria(t);
+    if (!porLiga.has(lid)) porLiga.set(lid, []);
+    porLiga.get(lid).push(t);
+  }
+  const ordemReg = { br: 0, am: 1, eu: 2 };
+  const secoes = [...porLiga.entries()].sort((a, b) => {
+    const ra = ordemReg[regiaoDe(a[0])] ?? 3, rb = ordemReg[regiaoDe(b[0])] ?? 3;
+    if (ra !== rb) return ra - rb;
+    const ta = (ligaInfo(a[0]) || {}).tier || 2, tb = (ligaInfo(b[0]) || {}).tier || 2;
+    if (ta !== tb) return ta - tb;                       // 1ª divisão antes da 2ª/3ª
+    if (b[1].length !== a[1].length) return b[1].length - a[1].length;
+    return ((ligaInfo(a[0]) || {}).nome || "").localeCompare((ligaInfo(b[0]) || {}).nome || "", "pt");
+  });
   const meus = todos.filter(t => favs.includes(t.tid));
-  const html = secao(`${svgIco("estrela")} Meus times`, meus) + secao("🇧🇷 Brasil", G.br) + secao(`${svgIco("mundo")} Américas`, G.am) + secao("🇪🇺 Europa", G.eu);
+  const html = secao(`${svgIco("estrela")} Meus times`, meus) +
+    secoes.map(([lid, arr]) => secao(`${bandeiraDe(lid)} ${(ligaInfo(lid) || {}).nome || "Outras competições"}`, arr)).join("");
   return html || `<div class="empty-box" style="margin-top:16px">Nenhum time com esse nome na base.</div>`;
 }
 function renderTimes(){
