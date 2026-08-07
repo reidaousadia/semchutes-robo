@@ -1615,28 +1615,52 @@ const TEND_VAL = {
   chutesGol: j => j.own.chutesGol ?? null,
   defesas:   j => j.own.defesas ?? null,
 };
-const TEND_DEFS = (() => {
-  // SÓ mercados que existem nas casas brasileiras, nas linhas que elas realmente abrem
-  const mercados = [
-    ["gols", "gols na partida", [1.5, 2.5, 3.5]],
-    ["cantos", "escanteios", [7.5, 8.5, 9.5, 10.5]],
-    ["cartoes", "cartões", [2.5, 3.5, 4.5, 5.5]],
-    ["faltas", "faltas na partida", [22.5, 24.5, 26.5]],
-    ["fin", "finalizações do time", [8.5, 10.5, 12.5]],
-    ["chutesGol", "chutes a gol do time", [2.5, 3.5, 4.5]],
-    ["defesas", "defesas do goleiro", [2.5, 3.5, 4.5]],
-  ];
+/* Linhas DINÂMICAS por jogo, como a casa abre: ancoradas na mediana dos jogos
+   recentes (a x,5 mais próxima = linha principal; ±1 degrau = alternativas).
+   Mercados de PARTIDA usam a mediana dos dois times juntos; estatística de TIME
+   (finalizações, chutes a gol, defesas) cada clube tem a linha do seu nível.
+   (Pedro 07/08: linha fixa erra pros dois lados — a casa calibra por jogo.) */
+function tendMediana(vals){
+  if (!vals.length) return null;
+  const s = [...vals].sort((a, b) => a - b), n = s.length;
+  return n % 2 ? s[(n - 1) / 2] : (s[n/2 - 1] + s[n/2]) / 2;
+}
+function tendLinhas(m, step){
+  const principal = Math.max(0.5, Math.round(m - 0.5) + 0.5);  // x,5 mais próxima da mediana
+  return [...new Set([Math.max(0.5, principal - step), principal, principal + step])];
+}
+function tendDefsPara(fx){
   const fmtL = L => String(L).replace(".", ",");
+  const valsDe = (tid, tipo) => getJogosRx(tid, fx.ligaId, state.rxJanela, state.rxEscopo, null)
+    .map(TEND_VAL[tipo]).filter(v => v != null);
   const defs = [];
-  for (const [tipo, nome, linhas] of mercados)
-    for (const L of linhas){
+  // mercados da PARTIDA
+  for (const [tipo, nome, step] of [["gols", "gols na partida", 1], ["cantos", "escanteios", 1],
+                                    ["cartoes", "cartões", 1], ["faltas", "faltas na partida", 2]]){
+    const m = tendMediana([...valsDe(fx.homeId, tipo), ...valsDe(fx.awayId, tipo)]);
+    if (m == null) continue;
+    for (const L of tendLinhas(m, step)){
       defs.push({ id: `o:${tipo}:${L}`, label: `Mais de ${fmtL(L)} ${nome}`, tipo, linha: L, dir: "o" });
       defs.push({ id: `u:${tipo}:${L}`, label: `Menos de ${fmtL(L)} ${nome}`, tipo, linha: L, dir: "u" });
     }
+  }
   defs.push({ id: "ambas:sim", label: "Ambas marcam", tipo: "gols", linha: null, dir: "sim" });
   defs.push({ id: "ambas:nao", label: "Ambas NÃO marcam", tipo: "gols", linha: null, dir: "nao" });
+  // mercados POR TIME — linha do nível de cada clube
+  for (const [tipo, nome, step] of [["fin", "finalizações", 2], ["chutesGol", "chutes a gol", 1],
+                                    ["defesas", "defesas do goleiro", 1]])
+    for (const side of ["H", "A"]){
+      const tid = side === "H" ? fx.homeId : fx.awayId;
+      const tn = side === "H" ? fx.home : fx.away;
+      const m = tendMediana(valsDe(tid, tipo));
+      if (m == null) continue;
+      for (const L of tendLinhas(m, step)){
+        defs.push({ id: `o:${tipo}:${L}:${side}`, label: `${tn} · mais de ${fmtL(L)} ${nome}`, tipo, linha: L, dir: "o", side });
+        defs.push({ id: `u:${tipo}:${L}:${side}`, label: `${tn} · menos de ${fmtL(L)} ${nome}`, tipo, linha: L, dir: "u", side });
+      }
+    }
   return defs;
-})();
+}
 function tendPontos(tid, fx, def){
   const js = [...getJogosRx(tid, fx.ligaId, state.rxJanela, state.rxEscopo, null)].reverse();
   return js.map(j => {
@@ -1650,11 +1674,12 @@ function tendPontos(tid, fx, def){
 }
 function abrirCardTendencia(fi, id, modo){
   const fx = FIXTURES[fi];
-  const def = TEND_DEFS.find(d => d.id === id); if (!def) return;
+  const def = tendDefsPara(fx).find(d => d.id === id); if (!def) return;
   const ehContinental = ehContinentalLiga(fx.ligaId);
   let contexto = `últimos ${state.rxJanela} jogos de cada time`;
   if (state.rxEscopo === "comp") contexto += ehContinental ? " · copas continentais" : ` · ${fx.competicao}`;
-  const pH = tendPontos(fx.homeId, fx, def), pA = tendPontos(fx.awayId, fx, def);
+  const pH = def.side === "A" ? [] : tendPontos(fx.homeId, fx, def);
+  const pA = def.side === "H" ? [] : tendPontos(fx.awayId, fx, def);
   if (!pH.length && !pA.length) return;
   if (modo === "grafico"){
     const serie = (pts, nome, cor) => pts.length ? { nome, cor, pts, media: pts.reduce((a,p)=>a+p.v,0)/pts.length } : null;
@@ -5456,17 +5481,18 @@ function renderJogo(){
         ${grupo("Disciplina", linha("faltas", "Faltas cometidas", rxH.faltas, rxA.faltas) + linha("amarelos", "Cartões amarelos", rxH.amarelos, rxA.amarelos) + linha("vermelhos", "Cartões vermelhos", rxH.vermelhos, rxA.vermelhos, 2))}
         ${grupo("Controle", linha("posse", "Posse de bola", rxH.posse, rxA.posse, 0, "%") + linha("laterais", "Arremessos laterais", rxH.laterais, rxA.laterais) + linha("tiroMeta", "Tiros de meta", rxH.tiroMeta, rxA.tiroMeta))}
         ${(() => {
-          // tendências da partida: varre TODOS os mercados, mostra só 70%+, mais fortes primeiro
+          // tendências da partida: varre TODOS os mercados (linhas dinâmicas), só 70%+, mais fortes primeiro
           const tendRow = def => {
-            const pH = tendPontos(fx.homeId, fx, def), pA = tendPontos(fx.awayId, fx, def);
-            if (!pH.length || !pA.length) return null;
-            const rH = { hit: pH.filter(p=>p.hit).length, n: pH.length };
-            const rA = { hit: pA.filter(p=>p.hit).length, n: pA.length };
-            const pct = Math.max(rH.hit/rH.n, rA.hit/rA.n);
+            const pH = def.side === "A" ? [] : tendPontos(fx.homeId, fx, def);
+            const pA = def.side === "H" ? [] : tendPontos(fx.awayId, fx, def);
+            if (def.side ? !(def.side === "H" ? pH : pA).length : (!pH.length || !pA.length)) return null;
+            const rH = pH.length ? { hit: pH.filter(p=>p.hit).length, n: pH.length } : null;
+            const rA = pA.length ? { hit: pA.filter(p=>p.hit).length, n: pA.length } : null;
+            const pct = Math.max(rH ? rH.hit/rH.n : 0, rA ? rA.hit/rA.n : 0);
             if (pct < 0.7) return null;
             return { def, rH, rA, pct, pH, pA };
           };
-          const quentes = TEND_DEFS.map(tendRow).filter(Boolean).sort((a,b) => b.pct - a.pct);
+          const quentes = tendDefsPara(fx).map(tendRow).filter(Boolean).sort((a,b) => b.pct - a.pct);
           const MAXT = 12;
           const mostradas = quentes.slice(0, MAXT);
           if (!mostradas.length) return "";
@@ -5507,10 +5533,14 @@ function renderJogo(){
             const key = "tend:" + t.def.id, aberto = state.rxChart === key;
             const hot = r => r.hit / r.n >= 0.7;
             const barra = (r, cls) => `<div class="rx-bar"><div class="rx-fill ${cls}" style="width:${r.hit/r.n*100}%"></div></div>`;
+            const ladoHTML = (r, cls, invertido) => r
+              ? (invertido ? `${barra(r, cls)}<span class="rx-val tnum" style="font-size:14px;${hot(r) ? "" : "opacity:.5"}">${r.hit}/${r.n}</span>`
+                           : `<span class="rx-val tnum" style="font-size:14px;${hot(r) ? "" : "opacity:.5"}">${r.hit}/${r.n}</span>${barra(r, cls)}`)
+              : "";
             return `<div class="rx-row rx-click ${aberto ? "rx-open" : ""}" title="Ver jogo a jogo" onclick="setRxChart('${key}')">
-              <div class="rx-side"><span class="rx-val tnum" style="font-size:14px;${hot(t.rH) ? "" : "opacity:.5"}">${t.rH.hit}/${t.rH.n}</span>${barra(t.rH,"home")}</div>
+              <div class="rx-side">${ladoHTML(t.rH, "home", false)}</div>
               <div class="rx-label">${t.def.label} <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5; margin-left:5px; transform:rotate(${aberto ? 180 : 0}deg)"><path d="M6 9l6 6 6-6"/></svg></div>
-              <div class="rx-side away">${barra(t.rA,"away")}<span class="rx-val tnum" style="font-size:14px;${hot(t.rA) ? "" : "opacity:.5"}">${t.rA.hit}/${t.rA.n}</span></div>
+              <div class="rx-side away">${ladoHTML(t.rA, "away", true)}</div>
             </div>${painel(t)}`;
           }).join("");
           return `<div class="rx-group"><div class="rx-group-t">Tendências da partida</div>
