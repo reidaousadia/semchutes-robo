@@ -2,7 +2,7 @@
    Estratégia conservadora pra NUNCA servir dado velho:
    · shell (html) e dados.js: rede primeiro, cache só como fallback offline
    · imagens (escudos/fotos via proxy): cache primeiro (mudam raramente)  */
-const CACHE = "apitou-v1";
+const CACHE = "apitou-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 
