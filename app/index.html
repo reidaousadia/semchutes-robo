@@ -49,6 +49,8 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
     --amber: #FE2C55;
     --amber-soft: rgba(254,44,85,0.14);
     --danger: #F2585E;
+    --pos: #2AE86B;                     /* verde neon: SINAL POSITIVO (apostador) */
+    --pos-soft: rgba(42,232,107,0.14);
     --track: #1A1A20;
 
     --shadow: 0 1px 0 rgba(255,255,255,0.03), 0 12px 32px -12px rgba(0,0,0,0.6);
@@ -75,6 +77,8 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
       --acc-soft: rgba(11,175,168,0.12);
       --amber: #E6224A;
       --amber-soft: rgba(230,34,74,0.12);
+      --pos: #16B558;
+      --pos-soft: rgba(22,181,88,0.13);
       --track: #E7E7EC;
       --shadow: 0 1px 0 rgba(255,255,255,0.6), 0 14px 30px -16px rgba(20,40,30,0.24);
     }
@@ -83,14 +87,14 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
     --bg: #050507; --surface: #101014; --surface-2: #17171C; --surface-3: #1F1F26;
     --border: #2B2B34; --border-soft: #202027; --text: #F5F5F7; --text-dim: #9A9AA5;
     --muted: #6B6B76; --acc: #2AE8E0; --acc-strong: #14C9C1; --acc-soft: rgba(42,232,224,0.14);
-    --amber: #FE2C55; --amber-soft: rgba(254,44,85,0.14); --track: #1A1A20;
+    --amber: #FE2C55; --amber-soft: rgba(254,44,85,0.14); --pos: #2AE86B; --pos-soft: rgba(42,232,107,0.14); --track: #1A1A20;
     --shadow: 0 1px 0 rgba(255,255,255,0.03), 0 12px 32px -12px rgba(0,0,0,0.6);
   }
   :root[data-theme="light"] {
     --bg: #F7F7F9; --surface: #FFFFFF; --surface-2: #F2F2F5; --surface-3: #EAEAEF;
     --border: #DDDDE4; --border-soft: #E7E7EC; --text: #101014; --text-dim: #55555F;
     --muted: #7E7E88; --acc: #0BAFA8; --acc-strong: #089B94; --acc-soft: rgba(11,175,168,0.12);
-    --amber: #E6224A; --amber-soft: rgba(230,34,74,0.12); --track: #E7E7EC;
+    --amber: #E6224A; --amber-soft: rgba(230,34,74,0.12); --pos: #16B558; --pos-soft: rgba(22,181,88,0.13); --track: #E7E7EC;
     --shadow: 0 1px 0 rgba(255,255,255,0.6), 0 14px 30px -16px rgba(20,40,30,0.24);
   }
 
@@ -660,7 +664,7 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   }
   /* semântica de apostador (Pedro 08/08): POSITIVO/bateu = ciano (nosso "verde"),
      negativo/não bateu = neutro apagado; rosa fica pra derrota/alerta explícito */
-  .bx.hit { color: var(--acc); background: color-mix(in srgb, var(--acc) 12%, transparent); border-color: color-mix(in srgb, var(--acc) 30%, var(--border-soft)); }
+  .bx.hit { color: var(--pos); background: color-mix(in srgb, var(--pos) 12%, transparent); border-color: color-mix(in srgb, var(--pos) 30%, var(--border-soft)); }
   .bx.miss { color: var(--amber); background: color-mix(in srgb, var(--amber) 10%, transparent); border-color: color-mix(in srgb, var(--amber) 26%, var(--border-soft)); }
   .bx.last { border-width: 2px; border-color: var(--text-dim); font-weight: 800; }
   .b365 { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-top: 22px; }
@@ -1790,9 +1794,9 @@ async function desenharTendencia(){
     const bs = 40, bg2 = 8, totalW = t.pts.length * bs + (t.pts.length - 1) * bg2;
     let bx = colCx - totalW / 2;
     t.pts.forEach(p => {
-      x.fillStyle = p.hit ? "rgba(42,232,224,0.18)" : "rgba(254,44,85,0.14)";
+      x.fillStyle = p.hit ? "rgba(42,232,107,0.18)" : "rgba(254,44,85,0.14)";
       x.beginPath(); x.roundRect(bx, Y(oBoxes) - bs/2, bs, bs, 9); x.fill();
-      x.font = `800 20px ${MONO}`; x.fillStyle = p.hit ? "#2AE8E0" : "#FE2C55";
+      x.font = `800 20px ${MONO}`; x.fillStyle = p.hit ? "#2AE86B" : "#FE2C55";
       x.fillText(String(p.v), bx + bs/2, Y(oBoxes) + 1);
       bx += bs + bg2;
     });
@@ -4573,9 +4577,9 @@ function renderJogadorSimples(){
             const zero = !v;
             const passou = linhaMk != null && v != null && v > linhaMk;
             const corTxt = linhaMk == null ? (zero ? "var(--txt3)" : "var(--acc)")
-                          : (v == null ? "var(--txt3)" : passou ? "var(--acc)" : "var(--amber)");
+                          : (v == null ? "var(--txt3)" : passou ? "var(--pos)" : "var(--amber)");
             const corBar = linhaMk == null ? (zero ? "rgba(255,255,255,0.10)" : "var(--acc)")
-                          : (v == null || v === 0 ? "rgba(255,255,255,0.10)" : passou ? "var(--acc)" : "var(--amber)");
+                          : (v == null || v === 0 ? "rgba(255,255,255,0.10)" : passou ? "var(--pos)" : "var(--amber)");
             const h = v == null ? 4 : Math.max(6, v/maxC*chartH);
             return `<div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%">
               <div class="tnum" style="font-size:12px; font-weight:800; color:${corTxt}; margin-bottom:3px; background:var(--bg); padding:0 4px; border-radius:4px; position:relative; z-index:3">${v == null ? "–" : v}</div>
@@ -4587,7 +4591,7 @@ function renderJogadorSimples(){
             </div>`;
           }).join("")}
         </div>
-        ${linhaMk != null ? `<div class="rx-sample" style="margin-top:6px">passou a linha ${String(linhaMk).replace(".", ",")} em <b style="color:var(--acc)">${hitsL} de ${valsC.length}</b> jogos da janela</div>` : ""}
+        ${linhaMk != null ? `<div class="rx-sample" style="margin-top:6px">passou a linha ${String(linhaMk).replace(".", ",")} em <b style="color:var(--pos)">${hitsL} de ${valsC.length}</b> jogos da janela</div>` : ""}
       </div>`;
 
     corpo = `
@@ -5831,7 +5835,7 @@ function abrirDesajusteFoco(i){
       const pts = [...getJogosRx(tid, fx.ligaId, janela, "geral", null)].reverse()
         .map(j => ({ v: meta.own(j), hit: meta.own(j) != null && meta.own(j) > r.linha, adv: j.advNome || "", ts: j.ts || "" }))
         .filter(p => p.v != null);
-      if (pts.length) serie.push({ nome, cor: "var(--acc)", pts });
+      if (pts.length) serie.push({ nome, cor: "var(--pos)", pts });
     }
   } else {
     const hist = getHistJogador(r.tid, r.nome, janela, "geral", fx.ligaId) || [];
@@ -5841,7 +5845,7 @@ function abrirDesajusteFoco(i){
       const v = jogou ? sel(g) : null;
       return { v, jogou, hit: jogou && v != null && v > r.linha, adv: g.a || "", ts: g.t || "" };
     }).filter(p => !p.jogou || p.v != null);
-    if (pts.some(p => p.jogou)) serie.push({ nome: r.nome, cor: "var(--acc)", pts });
+    if (pts.some(p => p.jogou)) serie.push({ nome: r.nome, cor: "var(--pos)", pts });
   }
   if (!serie.length) return;
   state.djFoco = { fi: r.fi, nome: r.nome, ehTime: !!r.ehTime, stat: r.stat, tid: r.tid, sub: r.sub,
@@ -5855,7 +5859,7 @@ function abrirCardDesajuste(modo){
   const linhaTxt = String(f.linha).replace(".", ",");
   const label = `Mais de ${linhaTxt} ${f.statLbl}${f.ehTime ? "" : " · " + f.nome}`;
   const contexto = `média ${fmt(f.media, 1).replace(".", ",")} · linha ${linhaTxt} · ${fmt(Math.abs(f.edge), 1).replace(".", ",")} ${f.edge >= 0 ? "acima" : "abaixo"} da linha`;
-  const CORES = ["#2AE8E0", "#FE2C55"];
+  const CORES = ["#2AE86B", "#FE2C55"];
   if (modo === "grafico"){
     state.card = { tipo: "grafico", formato: "sticker", fx, label, dec: 1, sufixo: "",
                    linha: f.linha, contexto,
@@ -5900,8 +5904,8 @@ function renderDesajusteFoco(){
               </div></div>`;
             const h = Math.max(6, p.v/maxV*chartH);
             return `<div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%">
-              <div class="tnum" style="font-size:11.5px; font-weight:800; color:${p.hit ? "var(--acc)" : "var(--amber)"}; background:var(--bg); padding:0 4px; border-radius:4px; position:relative; z-index:3">${p.v}</div>
-              <div style="width:100%; max-width:42px; height:${h}px; border-radius:4px 4px 0 0; background:${p.hit ? "var(--acc)" : "color-mix(in srgb, var(--amber) 55%, transparent)"}; margin-top:2px"></div>
+              <div class="tnum" style="font-size:11.5px; font-weight:800; color:${p.hit ? "var(--pos)" : "var(--amber)"}; background:var(--bg); padding:0 4px; border-radius:4px; position:relative; z-index:3">${p.v}</div>
+              <div style="width:100%; max-width:42px; height:${h}px; border-radius:4px 4px 0 0; background:${p.hit ? "var(--pos)" : "color-mix(in srgb, var(--amber) 55%, transparent)"}; margin-top:2px"></div>
               <div style="height:${rodape}px; display:flex; flex-direction:column; align-items:center; padding-top:4px; width:100%">
                 <span style="font-size:9px; color:var(--txt3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%">${p.adv}</span>
                 <span class="tnum" style="font-size:9px; color:var(--txt3)">${p.ts.slice(5).split("-").reverse().join("/")}</span>
@@ -5920,11 +5924,11 @@ function renderDesajusteFoco(){
           <div style="color:var(--text-dim); font-size:13px; margin-top:3px">média ${fmt(f.media, 1)} · passou a linha em ${f.hit} de ${f.n} jogos${f.sub === "total" ? " (dois times somados)" : " com dado"}</div>
         </div>
         <div style="display:flex; flex-direction:column; align-items:flex-end; flex:none">
-          <div class="tnum" style="font-size:34px; font-weight:800; color:${positivo ? "var(--acc)" : "var(--amber)"}">${positivo ? "+" : ""}${fmt(f.edge, 1)}</div>
-          <div style="font-size:10.5px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:${positivo ? "var(--acc)" : "var(--amber)"}; opacity:.85">${positivo ? "acima da linha" : "abaixo da linha"}</div>
+          <div class="tnum" style="font-size:34px; font-weight:800; color:${positivo ? "var(--pos)" : "var(--amber)"}">${positivo ? "+" : ""}${fmt(f.edge, 1)}</div>
+          <div style="font-size:10.5px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:${positivo ? "var(--pos)" : "var(--amber)"}; opacity:.85">${positivo ? "acima da linha" : "abaixo da linha"}</div>
         </div>
       </div>
-      <div class="rx-sample" style="margin-top:10px; text-align:left">em português claro: a casa abriu a linha em <b>${linhaTxt}</b>, mas a média real é <b>${fmt(f.media, 1)}</b> — ou seja, o número vem ficando <b style="color:${positivo ? "var(--acc)" : "var(--amber)"}">${fmt(Math.abs(f.edge), 1)} ${positivo ? "ACIMA" : "ABAIXO"}</b> do que a linha sugere. Quanto maior essa distância, maior o desajuste.</div>
+      <div class="rx-sample" style="margin-top:10px; text-align:left">em português claro: a casa abriu a linha em <b>${linhaTxt}</b>, mas a média real é <b>${fmt(f.media, 1)}</b> — ou seja, o número vem ficando <b style="color:${positivo ? "var(--pos)" : "var(--amber)"}">${fmt(Math.abs(f.edge), 1)} ${positivo ? "ACIMA" : "ABAIXO"}</b> do que a linha sugere. Quanto maior essa distância, maior o desajuste.</div>
       ${f.serie.map(bloco).join("")}
       <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap">
         <button class="h2h-cardbtn" style="flex:1; min-width:180px; margin:0" onclick="abrirCardDesajuste('grafico')">${svgIco("grafico")} Gerar card · gráfico</button>
@@ -6058,8 +6062,8 @@ function renderDesajustes(){
       <div class="dj-mid">
         <span class="dj-mercado">Mais de ${String(r.linha).replace(".", ",")} ${r.statLbl || STAT_LBL[r.stat]}</span>
         <span style="display:flex; flex-direction:column; align-items:flex-end; flex:none">
-          <span class="dj-edge tnum" style="color:${positivo ? "var(--acc)" : "var(--amber)"}">${positivo ? "+" : ""}${fmt(r.edge, 1)}</span>
-          <span style="font-size:10px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:${positivo ? "var(--acc)" : "var(--amber)"}; opacity:.8">${positivo ? "acima da linha" : "abaixo da linha"}</span>
+          <span class="dj-edge tnum" style="color:${positivo ? "var(--pos)" : "var(--amber)"}">${positivo ? "+" : ""}${fmt(r.edge, 1)}</span>
+          <span style="font-size:10px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:${positivo ? "var(--pos)" : "var(--amber)"}; opacity:.8">${positivo ? "acima da linha" : "abaixo da linha"}</span>
         </span>
       </div>
       <div class="dj-sub">média ${fmt(r.media, 1)} ${r.sub === "total" ? `em ${r.n} jogos dos dois times` : `nos últimos ${r.n} jogos com dado`} · passou a linha em ${r.hit} de ${r.n}</div>
