@@ -751,7 +751,9 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   .dj-mercado { font-weight: 650; font-size: 13.5px; }
   .dj-edge { font-size: 22px; font-weight: 800; flex: none; }
   .dj-sub { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
-  .dj-bxs { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+  .dj-bxs { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+  .dj-bxlbl { font-family: var(--f-mono); font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+    color: var(--muted); width: 32px; flex: none; }
 
   /* ---------- abas da tela do jogo (Números / Confronto / Quentes) ---------- */
   .jogo-tabs { display: flex; margin: 18px 0 8px; border-bottom: 1px solid var(--border-soft);
@@ -6123,10 +6125,12 @@ function renderDesajustes(){
           ? jogaveis.reduce((a, b) => Math.abs(a[1] - 1.9) < Math.abs(b[1] - 1.9) ? a : b)[0]
           : escada[escada.length - 1][0];
         let vals;
+        let valsH = null, valsA = null;
         if (sub === "total"){
           const lado = tid2 => getJogosRx(tid2, fx.ligaId, 15, "geral", null)
             .map(meta.tot).filter(v => v != null).slice(0, janela);
-          vals = [...lado(fx.homeId), ...lado(fx.awayId)];
+          valsH = lado(fx.homeId); valsA = lado(fx.awayId);
+          vals = [...valsH, ...valsA];
         } else {
           const tid = sub === "t1" ? fx.homeId : fx.awayId;
           vals = getJogosRx(tid, fx.ligaId, 15, "geral", null)
@@ -6140,7 +6144,7 @@ function renderDesajustes(){
         porChave.set(`time:${fid}:${tipo}:${sub}`, {
           fi, fx, tid: sub === "t2" ? fx.awayId : fx.homeId, nome, tipo, sub,
           stat: meta.chip, statLbl: `${meta.lbl}${sub === "total" ? " na partida" : ""}`,
-          linha, media, edge, vals: vals.slice(0, janela),
+          linha, media, edge, vals: vals.slice(0, janela), valsH, valsA,
           hit: vals.filter(v => v > linha).length, n: vals.length,
           ehCasa: sub !== "t2", ehTime: true });
       }
@@ -6174,7 +6178,16 @@ function renderDesajustes(){
         </span>
       </div>
       <div class="dj-sub">média ${fmt(r.media, 1)} ${r.sub === "total" ? `nos últimos 10 jogos de cada time` : `nos últimos ${r.n} jogos com dado`} · passou a linha em ${r.hit} de ${r.n}</div>
-      ${r.sub === "total" ? "" : `<div class="dj-bxs">${barras}</div>`}
+      ${r.sub === "total" ? (() => {
+        const abrev = n => {
+          const ws = n.replace(/[^A-Za-zÀ-ú ]/g, "").split(" ").filter(Boolean);
+          return (ws.length >= 2 ? ws.map(w => w[0]).join("").slice(0, 3) : (ws[0] || n).slice(0, 3)).toUpperCase();
+        };
+        const fileira = vs => [...(vs || [])].reverse().map((v, i, arr) =>
+          `<span class="bx ${i === arr.length-1 ? "last" : ""} ${v > r.linha ? "hit" : "miss"}">${v}</span>`).join("");
+        return `<div class="dj-bxs"><span class="dj-bxlbl">${abrev(r.fx.home)}</span>${fileira(r.valsH)}</div>
+                <div class="dj-bxs"><span class="dj-bxlbl">${abrev(r.fx.away)}</span>${fileira(r.valsA)}</div>`;
+      })() : `<div class="dj-bxs">${barras}</div>`}
     </button>`;
   };
   el.innerHTML = `
