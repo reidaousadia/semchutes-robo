@@ -1,12 +1,12 @@
 name: linhas-mercado
 # Snapshots das linhas de mercado pra aba Desajustes (Altenar grátis + OddsPapi).
-# 3 fotos por dia — de manhã, início da tarde e fim da tarde (BRT = UTC-3):
-# cobre a agenda com linhas frescas sem estourar cota (2 req OddsPapi por run).
+# De 30 em 30 min na janela 08h–00h BRT (decisão do Pedro 08/08): linha nunca
+# fica mais de 30 min defasada. Custo: 32 coletas/dia × 3 casas ≈ 2.880 req/mês
+# dos 5.000 do plano. BRT = UTC-3 → janela em UTC: 11h–02h59.
 on:
   schedule:
-    - cron: "23 13 * * *"   # 10:23 BRT
-    - cron: "23 17 * * *"   # 14:23 BRT
-    - cron: "23 21 * * *"   # 18:23 BRT
+    - cron: "8,38 11-23 * * *"   # 08:08–20:38 BRT
+    - cron: "8,38 0-2 * * *"     # 21:08–23:38 BRT
   workflow_dispatch:
 
 jobs:
