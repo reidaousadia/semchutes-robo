@@ -1909,6 +1909,7 @@ let prevView = "search";
 
 function go(view, playerId, qiFixture, qiPlayer, jogoIdx){
   if (view !== "player" && view !== "jogadorqi" && view !== "jogador") prevView = view;
+  if (view !== "jogador") state.jgLinha = null;   // linha do Desajustes só vale no perfil aberto por ele
   state.view = view;
   if (playerId != null) state.playerId = playerId;
   if (qiFixture != null) state.qiFixture = qiFixture;
@@ -4545,21 +4546,33 @@ function renderJogadorSimples(){
       .map(([k, lbl]) => `<button class="jogo-tab ${statSel===k?'on':''}" onclick="setJgStat('${k}')">${lbl}</button>`).join("")}</div>`;
     const vsChart = [...hist].reverse();  // esquerda = mais antigo
     const valsC = vsChart.map(g => g[statSel]).filter(v => v != null);
-    const maxC = Math.max(...valsC, 0.001);
+    // modo PropsCash: veio da aba Desajustes → LINHA da casa desenhada e barras
+    // coloridas contra ela (ciano passou, rosa não)
+    const linhaMk = state.jgLinha && state.jgLinha.statKey === statSel ? state.jgLinha.valor : null;
+    const maxC = Math.max(...valsC, linhaMk || 0, 0.001);
     const mediaC = valsC.length ? valsC.reduce((a,b)=>a+b,0)/valsC.length : 0;
+    const hitsL = linhaMk != null ? valsC.filter(v => v > linhaMk).length : 0;
     const chartH = 150, rodapeH = 36;
     const grafico = `
       <div style="position:relative; margin-top:14px">
-        <div style="position:absolute; left:0; right:0; bottom:${rodapeH + mediaC/maxC*chartH}px; border-top:1.5px dashed rgba(255,255,255,0.4); z-index:2; pointer-events:none"></div>
+        <div style="position:absolute; left:0; right:0; bottom:${rodapeH + mediaC/maxC*chartH}px; border-top:1.5px dashed rgba(255,255,255,${linhaMk != null ? "0.22" : "0.4"}); z-index:2; pointer-events:none"></div>
         <div class="tnum" style="position:absolute; right:2px; bottom:${rodapeH + mediaC/maxC*chartH + 4}px; font-size:10.5px; color:var(--txt3); z-index:2; pointer-events:none">média ${metaSel[2] ? fmt(mediaC) : Math.round(mediaC)}</div>
+        ${linhaMk != null ? `
+        <div style="position:absolute; left:0; right:0; bottom:${rodapeH + linhaMk/maxC*chartH}px; border-top:2px solid rgba(255,255,255,0.85); z-index:3; pointer-events:none"></div>
+        <div class="tnum" style="position:absolute; left:2px; bottom:${rodapeH + linhaMk/maxC*chartH + 4}px; font-size:11px; font-weight:800; color:var(--text); z-index:3; pointer-events:none">linha ${String(linhaMk).replace(".", ",")}</div>` : ""}
         <div style="display:flex; align-items:flex-end; gap:6px; height:${chartH + rodapeH + 22}px">
           ${vsChart.map(g => {
             const v = g[statSel];
             const zero = !v;
+            const passou = linhaMk != null && v != null && v > linhaMk;
+            const corTxt = linhaMk == null ? (zero ? "var(--txt3)" : "var(--acc)")
+                          : (v == null ? "var(--txt3)" : passou ? "var(--acc)" : "var(--amber)");
+            const corBar = linhaMk == null ? (zero ? "rgba(255,255,255,0.10)" : "var(--acc)")
+                          : (v == null || v === 0 ? "rgba(255,255,255,0.10)" : passou ? "var(--acc)" : "var(--amber)");
             const h = v == null ? 4 : Math.max(6, v/maxC*chartH);
             return `<div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%">
-              <div class="tnum" style="font-size:12px; font-weight:800; color:${zero ? "var(--txt3)" : "var(--acc)"}; margin-bottom:3px">${v == null ? "–" : v}</div>
-              <div style="width:100%; max-width:46px; height:${h}px; border-radius:5px 5px 0 0; background:${zero ? "rgba(255,255,255,0.10)" : "var(--acc)"}"></div>
+              <div class="tnum" style="font-size:12px; font-weight:800; color:${corTxt}; margin-bottom:3px">${v == null ? "–" : v}</div>
+              <div style="width:100%; max-width:46px; height:${h}px; border-radius:5px 5px 0 0; background:${corBar}"></div>
               <div style="height:${rodapeH}px; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:5px; width:100%">
                 <span style="font-size:9.5px; color:var(--txt3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%">${g.a}</span>
                 <span class="tnum" style="font-size:9.5px; color:var(--txt3)">${g.t.slice(5).split("-").reverse().join("/")}</span>
@@ -4567,6 +4580,7 @@ function renderJogadorSimples(){
             </div>`;
           }).join("")}
         </div>
+        ${linhaMk != null ? `<div class="rx-sample" style="margin-top:6px">passou a linha ${String(linhaMk).replace(".", ",")} em <b style="color:var(--acc)">${hitsL} de ${valsC.length}</b> jogos da janela</div>` : ""}
       </div>`;
 
     corpo = `
@@ -5767,6 +5781,17 @@ function resolveJogador(nomeFeed, tids){
   }
   return null;
 }
+function abrirDesajuste(fi, tid, nomeB64, statKey, linha){
+  const nome = decodeURIComponent(escape(atob(nomeB64)));   // base64 evita aspas/acentos no onclick
+  const fx = FIXTURES[fi]; if (!fx) return;
+  const side = tid === fx.homeId ? "home" : "away";
+  const idx = (ELENCOS[String(tid)] || []).findIndex(j => j.name === nome);
+  if (idx < 0){ go('jogo', null, null, null, fi); return; }  // sem elenco → raio-x do jogo
+  state.j2 = { fi, side, idx };
+  state.jgStat = statKey === "fin" ? "f" : "o";
+  state.jgLinha = { statKey: state.jgStat, valor: linha };   // desenha a linha no gráfico
+  go('jogador');
+}
 function renderDesajustes(){
   const el = document.getElementById("view");
   const janela = state.djJanela || 10;
@@ -5829,7 +5854,7 @@ function renderDesajustes(){
     const positivo = r.edge >= 0;
     const barras = [...r.vals].reverse().map((v, i, arr) =>
       `<span class="bx ${i === arr.length-1 ? "last" : ""} ${v > r.linha ? "hit" : ""}">${v}</span>`).join("");
-    return `<button class="dj-row" onclick="go('jogo', null, null, null, ${r.fi})">
+    return `<button class="dj-row" onclick="abrirDesajuste(${r.fi}, ${r.tid}, '${btoa(unescape(encodeURIComponent(r.nome)))}', '${r.stat}', ${r.linha})">
       <div class="dj-head"><span class="dj-nome">${r.nome}</span>
         <span class="dj-time">${r.ehCasa ? r.fx.home : r.fx.away} · ${r.fx.home} x ${r.fx.away}</span></div>
       <div class="dj-mid">
