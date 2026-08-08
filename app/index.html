@@ -6126,6 +6126,24 @@ function renderDesajustes(){
   const el = document.getElementById("view");
   const janela = 10;   // base fixa do coeficiente de desajuste (padrão PropsCash)
   const statFiltro = state.djStat || "todos";
+  const diaFiltro = state.djDia || "hoje";
+  const dStr = d => d.toLocaleDateString("pt-BR");
+  const hojeS = dStr(new Date()), amS = dStr(new Date(Date.now() + 864e5));
+  const passaDia = k => {
+    if (!k || diaFiltro === "semana") return true;
+    const ds = dStr(new Date(k));
+    // "Amanhã" é cumulativo: hoje + amanhã (Pedro 08/08)
+    return diaFiltro === "hoje" ? ds === hojeS : (ds === hojeS || ds === amS);
+  };
+  const quando = k => {
+    if (!k) return "";
+    const dt = new Date(k);
+    const hh = dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const ds = dStr(dt);
+    if (ds === hojeS) return `hoje ${hh}`;
+    if (ds === amS) return `amanhã ${hh}`;
+    return `${dt.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")} ${ds.slice(0, 5)} · ${hh}`;
+  };
   const fxPorId = {};
   Object.keys(FIXTURES).forEach(k => { const f = FIXTURES[k]; if (f && f.id != null) fxPorId[String(f.id)] = [k, f]; });
   const STAT_LBL = DJ_STAT_LBL, SEL = DJ_SEL, CAP = DJ_CAP;
@@ -6135,6 +6153,7 @@ function renderDesajustes(){
   for (const [fid, jg] of Object.entries(LINHAS.jogos || {})){
     const par = fxPorId[fid]; if (!par) continue;
     const [fi, fx] = par;
+    if (!passaDia(fx.kickoff)) continue;
     for (const [nomeFeed, stats] of Object.entries(jg.jogador || {})){
       const res = resolveJogador(nomeFeed, [fx.homeId, fx.awayId]);
       if (!res) continue;
@@ -6179,6 +6198,7 @@ function renderDesajustes(){
   for (const [fid, jg] of Object.entries(LINHAS.jogos || {})){
     const par = fxPorId[fid]; if (!par || !jg.time) continue;
     const [fi, fx] = par;
+    if (!passaDia(fx.kickoff)) continue;
     for (const [tipo, subs] of Object.entries(jg.time)){
       const meta = T_META[tipo]; if (!meta) continue;
       if (statFiltro !== "todos" && statFiltro !== meta.chip) continue;
@@ -6230,9 +6250,10 @@ function renderDesajustes(){
     const barras = [...r.vals].reverse().map((v, i, arr) =>
       `<span class="bx ${i === arr.length-1 ? "last" : ""} ${v > r.linha ? "hit" : "miss"}">${v}</span>`).join("");
     const clique = `abrirDesajusteFoco(${top.indexOf(r)})`;
-    const contexto = r.ehTime
+    const contexto = (r.ehTime
       ? (r.nome.includes(" x ") ? r.fx.competicao : `${r.fx.home} x ${r.fx.away}`)
-      : `${r.ehCasa ? r.fx.home : r.fx.away} · ${r.fx.home} x ${r.fx.away}`;
+      : `${r.ehCasa ? r.fx.home : r.fx.away} · ${r.fx.home} x ${r.fx.away}`)
+      + ` · ${quando(r.fx.kickoff)}`;
     return `<button class="dj-row" onclick="${clique}">
       <div class="dj-head"><span class="dj-nome">${r.nome}</span>
         <span class="dj-time">${contexto}</span></div>
@@ -6259,6 +6280,8 @@ function renderDesajustes(){
   el.innerHTML = `
     <div class="section-h" style="margin-top:6px"><span class="lbl">Desajustes</span><span class="count tnum">${rows.length} linhas analisadas</span></div>
     <div class="rx-sample" style="margin:2px 0 10px">onde a média do jogador mais destoa da linha típica do jogo — maiores diferenças primeiro${LINHAS.geradoEm ? ` · linhas de ${LINHAS.geradoEm.slice(8,10)}/${LINHAS.geradoEm.slice(5,7)} ${LINHAS.geradoEm.slice(11,16)}` : ""}</div>
+    <div class="filters" style="margin-bottom:6px">${["hoje","amanha","semana"].map(d =>
+      `<button class="chip ${diaFiltro === d ? "on" : ""}" onclick="state.djDia='${d}'; render()">${d === "hoje" ? "Hoje" : d === "amanha" ? "Amanhã" : "Semana"}</button>`).join("")}</div>
     <div class="filters" style="margin-bottom:6px">${chipS("todos","Todas")}${chipS("fin","Finalizações")}${chipS("chutesGol","Chutes a gol")}${chipS("gols","Gols")}${chipS("cartoes","Cartões")}${chipS("desarmes","Desarmes")}${chipS("faltas","Faltas")}${chipS("tCantos","Escanteios · time")}${chipS("tCartoes","Cartões · time")}${chipS("tGols","Gols · time")}</div>
 
     ${top.length ? top.map(linhaHTML).join("")
