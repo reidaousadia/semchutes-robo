@@ -35,7 +35,7 @@ def acha_chave():
     sys.exit("ODDSPAPI_KEY não encontrada")
 
 KEY = acha_chave()
-CASAS = [("betano.bet.br", "betano"), ("bet365", "bet365")]
+CASAS = [("betano.bet.br", "betano"), ("bet365", "bet365"), ("estrelabet", "estrela")]
 TORNEIOS = "325,390"          # Série A e B (ids OddsPapi)
 # Player props OddsPapi: market → chave Apitou; outcomes "N+" = linha N-0.5
 M_PROPS = {"10743": "fin", "10753": "chutesGol"}
@@ -86,11 +86,17 @@ def main():
         return None
 
     jogos = {}
-    for slug, apelido in CASAS:
-        feed = curl(f"https://api.oddspapi.io/v4/odds-by-tournaments?bookmaker={slug}"
-                    f"&tournamentIds={TORNEIOS}&oddsFormat=decimal&apiKey={KEY}")
+    for idx, (slug, apelido) in enumerate(CASAS):
+        if idx: time.sleep(8)   # cooldown do endpoint (rate limit do OddsPapi)
+        feed = None
+        for tent in range(2):
+            feed = curl(f"https://api.oddspapi.io/v4/odds-by-tournaments?bookmaker={slug}"
+                        f"&tournamentIds={TORNEIOS}&oddsFormat=decimal&apiKey={KEY}")
+            if isinstance(feed, list): break
+            print(f"{slug}: rate limit/erro — aguardando 30s ({str(feed)[:80]})", flush=True)
+            time.sleep(30)
         if not isinstance(feed, list):
-            print(f"{slug}: resposta inesperada {str(feed)[:120]}", flush=True)
+            print(f"{slug}: desistindo nesta rodada", flush=True)
             continue
         casados = 0
         for ev in feed:
@@ -131,13 +137,11 @@ def main():
                 if reg["p"] is None and reg["l"]:
                     reg["p"] = float(min(reg["l"], key=lambda L: abs(reg["l"][L] - 1.9)))
 
-    # mescla linhas de TIME do coletor Altenar (se rodou antes)
-    alt_path = os.path.join(RAIZ, "app", "linhas.js")
+    # mescla linhas de TIME do coletor Altenar (JSON intermediário, formato próprio)
+    alt_path = os.path.join(RAIZ, "robo", "linhas_altenar.json")
     if os.path.exists(alt_path):
         try:
-            asrc = open(alt_path, encoding="utf-8").read()
-            j0 = asrc.index("window.SC_LINHAS=")
-            alt, _ = json.JSONDecoder().raw_decode(asrc[j0 + len("window.SC_LINHAS="):].lstrip())
+            alt = json.load(open(alt_path, encoding="utf-8"))
             for fid, aj in (alt.get("jogos") or {}).items():
                 alvo = jogos.setdefault(fid, {"kickoff": aj.get("kickoff"), "jogador": {}, "time": {}})
                 if aj.get("time"): alvo["time"] = aj["time"]

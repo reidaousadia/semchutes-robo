@@ -5776,7 +5776,7 @@ function renderDesajustes(){
   const STAT_LBL = { fin: "finalizações", chutesGol: "chutes a gol" };
   const SEL = { fin: g => g.f, chutesGol: g => g.o };
   // mesmo jogador pode vir de mais de uma fonte — fica a de maior prioridade
-  const PRIO = { betano: 0, bet365: 1, altenar: 2 };
+  const PRIO = { betano: 0, bet365: 1, estrela: 2, altenar: 3 };
   const porChave = new Map();
   for (const [fid, jg] of Object.entries(LINHAS.jogos || {})){
     const par = fxPorId[fid]; if (!par) continue;
@@ -5788,12 +5788,17 @@ function renderDesajustes(){
       for (const [stat, reg] of Object.entries(stats)){
         if (!SEL[stat] || !reg.l) continue;
         if (statFiltro !== "todos" && statFiltro !== stat) continue;
-        let linha = reg.p;
-        // altenar marca a principal de forma imprecisa — usa a linha mais equilibrada
-        if (reg.c === "altenar" || linha == null){
-          const ls = Object.keys(reg.l);
-          if (!ls.length) continue;
-          linha = +ls.reduce((a, b) => Math.abs(reg.l[a] - 1.9) < Math.abs(reg.l[b] - 1.9) ? a : b);
+        // LINHA-BASE (regra do Pedro): odd < 1,50 é "cadeado", não linha jogável.
+        // Usa a principal da casa SE a odd dela for >= 1,50; senão a menor linha
+        // com odd >= 1,50; se nada atinge, a mais alta da escada.
+        const escada = Object.entries(reg.l).map(([L, o]) => [parseFloat(L), o])
+          .filter(([L, o]) => !isNaN(L) && o != null).sort((a, b) => a[0] - b[0]);
+        if (!escada.length) continue;
+        let linha = null;
+        if (reg.p != null && reg.l[String(reg.p)] >= 1.5) linha = reg.p;
+        else {
+          const jogavel = escada.find(([L, o]) => o >= 1.5);
+          linha = jogavel ? jogavel[0] : escada[escada.length - 1][0];
         }
         const hist = getHistJogador(tid, nome, janela, "geral", fx.ligaId) || [];
         const vals = hist.map(SEL[stat]).filter(v => v != null);

@@ -182,9 +182,9 @@ def main():
 
     payload = {"geradoEm": datetime.now(BRT).isoformat(), "fonte": "altenar",
                "integracao": INTEGRACAO, "jogos": jogos_out}
-    destino = os.path.join(RAIZ, "app", "linhas.js")
+    destino = os.path.join(RAIZ, "robo", "linhas_altenar.json")
     with open(destino, "w", encoding="utf-8") as f:
-        f.write("window.SC_LINHAS=" + json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + ";\n")
+        json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
     print(f"OK linhas.js: {casados} jogos casados de {ev_total} eventos · "
           f"{round(os.path.getsize(destino)/1024)} KB", flush=True)
 
