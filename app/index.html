@@ -733,6 +733,19 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
     border: 1px solid color-mix(in srgb, #E05A4E 30%, var(--border-soft)); border-radius: 8px; padding: 9px 12px; }
   .esc-desf span { color: var(--muted); }
 
+  /* ---------- aba Desajustes ---------- */
+  .dj-row { display: block; width: 100%; box-sizing: border-box; text-align: left;
+    background: var(--surface); border: 1px solid var(--border-soft); border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 10px; cursor: pointer; color: inherit; font-family: inherit; }
+  .dj-row:hover { border-color: var(--acc); }
+  .dj-nome { font-weight: 800; font-size: 15px; }
+  .dj-time { color: var(--muted); font-size: 12px; margin-left: 8px; }
+  .dj-mid { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; gap: 10px; }
+  .dj-mercado { font-weight: 650; font-size: 13.5px; }
+  .dj-edge { font-size: 22px; font-weight: 800; flex: none; }
+  .dj-sub { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
+  .dj-bxs { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+
   /* ---------- abas da tela do jogo (Números / Confronto / Quentes) ---------- */
   .jogo-tabs { display: flex; margin: 18px 0 8px; border-bottom: 1px solid var(--border-soft);
     background: var(--surface); border: 1px solid var(--border-soft); border-radius: 12px;
@@ -1178,6 +1191,7 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
       <button class="navbtn" id="nav-times" onclick="go('times')">Times</button>
       <button class="navbtn" id="nav-search" onclick="go('search')">Jogadores</button>
       <button class="navbtn" id="nav-ranking" onclick="go('ranking')">Ranking</button>
+      <button class="navbtn" id="nav-desajustes" onclick="go('desajustes')">Desajustes</button>
     </nav>
     <div class="spacer"></div>
     <button class="header-busca" onclick="abrirBusca()" aria-label="Buscar">
@@ -1199,7 +1213,7 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   </div>
 </header>
 
-<script src="dados.js"></script>
+<script src="dados.js"></script><script src="linhas.js"></script>
 <main><div class="wrap" id="view"></div></main>
 
 <div class="bottomnav"><div class="inner">
@@ -1218,6 +1232,10 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   <button class="bnav-btn" id="bnav-ranking" onclick="go('ranking')">
     <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20V10M12 20V4M18 20v-7"/></svg>
     Ranking
+  </button>
+  <button class="bnav-btn" id="bnav-desajustes" onclick="go('desajustes')">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.5"/></svg>
+    Desajustes
   </button>
 </div></div>
 
@@ -1903,10 +1921,12 @@ function go(view, playerId, qiFixture, qiPlayer, jogoIdx){
     "nav-times": ["times","time"],
     "nav-search": ["search","jogador"],
     "nav-ranking": ["ranking"],
+    "nav-desajustes": ["desajustes"],
     "bnav-hoje": ["oportunidades","jogo","jogos","arbitro"],
     "bnav-times": ["times","time"],
     "bnav-search": ["search","jogador"],
     "bnav-ranking": ["ranking"],
+    "bnav-desajustes": ["desajustes"],
   };
   for (const [id, views] of Object.entries(navMap)){
     const btn = document.getElementById(id);
@@ -5719,6 +5739,112 @@ function renderAoVivo(){
   `;
 }
 
+/* ---------- aba DESAJUSTES: linha da casa vs números Apitou (modelo PropsCash) ----------
+   vocabulário 100% estatístico no app: "linha", "média", "passou em X de N".
+   Nada de odd/casa/aposta — as odds ficam no servidor como régua interna. */
+const LINHAS = window.SC_LINHAS || { jogos: {} };
+function normNome(s){
+  s = (s || "").toLowerCase();
+  if (s.includes(",")) s = s.split(",").reverse().join(" ");   // "Pavon, Cristian" → "cristian pavon"
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+}
+function resolveJogador(nomeFeed, tids){
+  const alvo = normNome(nomeFeed), alvoSem = alvo.replace(/ /g, "");
+  const tokens = alvo.split(" ").filter(Boolean);
+  const sobren = tokens[tokens.length - 1] || "";
+  const candidatos = [];
+  for (const tid of tids)
+    for (const nome of Object.keys((SEM.jogHist || {})[String(tid)] || {})) candidatos.push([tid, nome]);
+  for (const c of candidatos) if (normNome(c[1]).replace(/ /g, "") === alvoSem) return c;
+  const porSobren = candidatos.filter(c => {
+    const n = normNome(c[1]);
+    return n.split(" ").includes(sobren) || (sobren.length > 4 && n.replace(/ /g, "").includes(sobren));
+  });
+  if (porSobren.length === 1) return porSobren[0];
+  if (porSobren.length > 1 && tokens[0]){
+    const porIni = porSobren.filter(c => normNome(c[1])[0] === tokens[0][0]);
+    if (porIni.length === 1) return porIni[0];
+  }
+  return null;
+}
+function renderDesajustes(){
+  const el = document.getElementById("view");
+  const janela = state.djJanela || 10;
+  const statFiltro = state.djStat || "todos";
+  const fxPorId = {};
+  Object.keys(FIXTURES).forEach(k => { const f = FIXTURES[k]; if (f && f.id != null) fxPorId[String(f.id)] = [k, f]; });
+  const STAT_LBL = { fin: "finalizações", chutesGol: "chutes a gol" };
+  const SEL = { fin: g => g.f, chutesGol: g => g.o };
+  // mesmo jogador pode vir de mais de uma fonte — fica a de maior prioridade
+  const PRIO = { betano: 0, bet365: 1, altenar: 2 };
+  const porChave = new Map();
+  for (const [fid, jg] of Object.entries(LINHAS.jogos || {})){
+    const par = fxPorId[fid]; if (!par) continue;
+    const [fi, fx] = par;
+    for (const [nomeFeed, stats] of Object.entries(jg.jogador || {})){
+      const res = resolveJogador(nomeFeed, [fx.homeId, fx.awayId]);
+      if (!res) continue;
+      const [tid, nome] = res;
+      for (const [stat, reg] of Object.entries(stats)){
+        if (!SEL[stat] || !reg.l) continue;
+        if (statFiltro !== "todos" && statFiltro !== stat) continue;
+        let linha = reg.p;
+        // altenar marca a principal de forma imprecisa — usa a linha mais equilibrada
+        if (reg.c === "altenar" || linha == null){
+          const ls = Object.keys(reg.l);
+          if (!ls.length) continue;
+          linha = +ls.reduce((a, b) => Math.abs(reg.l[a] - 1.9) < Math.abs(reg.l[b] - 1.9) ? a : b);
+        }
+        const hist = getHistJogador(tid, nome, janela, "geral", fx.ligaId) || [];
+        const vals = hist.map(SEL[stat]).filter(v => v != null);
+        if (vals.length < 5) continue;
+        const media = vals.reduce((a, b) => a + b, 0) / vals.length;
+        const edge = media - linha;
+        // sanidade: a casa calibra a linha perto do nível real do jogador — desvio
+        // gigante é match de homônimo errado, não oportunidade (corta > 3)
+        if (Math.abs(edge) > 3) continue;
+        const chave = `${tid}:${nome}:${stat}`;
+        const atual = porChave.get(chave);
+        if (atual && (PRIO[atual.casa] ?? 9) <= (PRIO[reg.c] ?? 9)) continue;
+        porChave.set(chave, { fi, fx, tid, nome, stat, linha, media, edge, vals,
+                              hit: vals.filter(v => v > linha).length, n: vals.length,
+                              ehCasa: tid === fx.homeId, casa: reg.c });
+      }
+    }
+  }
+  const rows = [...porChave.values()];
+  // positivos primeiro (média Apitou JÁ passa a linha — sinal forte, pois nossa
+  // contagem de finalizações é mais conservadora que a das casas), depois os
+  // negativos mais extremos
+  rows.sort((a, b) => (b.edge) - (a.edge));
+  const top = rows.slice(0, 40);
+  const chipS = (k, lbl) => `<button class="chip ${statFiltro===k?'on':''}" onclick="state.djStat='${k}'; render()">${lbl}</button>`;
+  const chipJ = n => `<button class="chip ${janela===n?'on':''}" onclick="state.djJanela=${n}; render()">Últimos ${n}</button>`;
+  const linhaHTML = r => {
+    const positivo = r.edge >= 0;
+    const barras = [...r.vals].reverse().map((v, i, arr) =>
+      `<span class="bx ${i === arr.length-1 ? "last" : ""} ${v > r.linha ? "hit" : ""}">${v}</span>`).join("");
+    return `<button class="dj-row" onclick="go('jogo', null, null, null, ${r.fi})">
+      <div class="dj-head"><span class="dj-nome">${r.nome}</span>
+        <span class="dj-time">${r.ehCasa ? r.fx.home : r.fx.away} · ${r.fx.home} x ${r.fx.away}</span></div>
+      <div class="dj-mid">
+        <span class="dj-mercado">Mais de ${String(r.linha).replace(".", ",")} ${STAT_LBL[r.stat]}</span>
+        <span class="dj-edge tnum" style="color:${positivo ? "var(--acc)" : "var(--amber)"}">${positivo ? "+" : ""}${fmt(r.edge, 1)}</span>
+      </div>
+      <div class="dj-sub">média ${fmt(r.media, 1)} nos últimos ${r.n} · passou a linha em ${r.hit} de ${r.n}</div>
+      <div class="dj-bxs">${barras}</div>
+    </button>`;
+  };
+  el.innerHTML = `
+    <div class="section-h" style="margin-top:6px"><span class="lbl">Desajustes</span><span class="count tnum">${rows.length} linhas analisadas</span></div>
+    <div class="rx-sample" style="margin:2px 0 10px">onde a média do jogador mais destoa da linha típica do jogo — maiores diferenças primeiro${LINHAS.geradoEm ? ` · linhas de ${LINHAS.geradoEm.slice(8,10)}/${LINHAS.geradoEm.slice(5,7)} ${LINHAS.geradoEm.slice(11,16)}` : ""}</div>
+    <div class="filters" style="margin-bottom:6px">${chipS("todos","Todas")}${chipS("fin","Finalizações")}${chipS("chutesGol","Chutes a gol")}</div>
+    <div class="filters" style="margin-bottom:12px">${chipJ(5)}${chipJ(10)}</div>
+    ${top.length ? top.map(linhaHTML).join("")
+      : `<div class="empty-box">Sem linhas disponíveis agora — elas abrem perto dos jogos e são atualizadas 3x ao dia.</div>`}
+    ${sourceNoteQI()}`;
+}
+
 function render(){
   // telas de DETALHE escondem a barra de busca mobile — menos empilhamento no topo
   document.body.classList.toggle("tela-detalhe",
@@ -5730,6 +5856,7 @@ function render(){
   else if (state.view==="times") renderTimes();
   else if (state.view==="time") renderTime();
   else if (state.view==="search") renderSearch();
+  else if (state.view==="desajustes") renderDesajustes();
   else renderRanking();
 }
 

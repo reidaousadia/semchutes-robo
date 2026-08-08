@@ -1,0 +1,52 @@
+name: linhas-mercado
+# Snapshots das linhas de mercado pra aba Desajustes (Altenar grátis + OddsPapi).
+# 3 fotos por dia — de manhã, início da tarde e fim da tarde (BRT = UTC-3):
+# cobre a agenda com linhas frescas sem estourar cota (2 req OddsPapi por run).
+on:
+  schedule:
+    - cron: "23 13 * * *"   # 10:23 BRT
+    - cron: "23 17 * * *"   # 14:23 BRT
+    - cron: "23 21 * * *"   # 18:23 BRT
+  workflow_dispatch:
+
+jobs:
+  linhas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: baixa dados.js de produção (casamento de jogos usa a agenda publicada)
+        run: curl -s https://apitou.com.br/dados.js -o app/dados.js
+      - name: coleta linhas (Altenar + OddsPapi)
+        env:
+          ODDSPAPI_KEY: ${{ secrets.ODDSPAPI_KEY }}
+        run: |
+          echo "ODDSPAPI_KEY=$ODDSPAPI_KEY" > .env
+          python3 robo/linhas_altenar.py
+          python3 robo/linhas_mercado.py
+      - name: publica linhas.js no site (deploy só do arquivo, preservando o resto)
+        env:
+          NETLIFY_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
+        run: |
+          python3 - <<'EOF'
+          import hashlib, json, os, urllib.request
+          # deploy por digest: o mapa precisa ter TODOS os arquivos do site
+          # (arquivo fora do mapa é apagado) — lista os atuais e troca só o linhas.js
+          tok = os.environ["NETLIFY_TOKEN"]
+          site = "adorable-crisp-5c2dc0.netlify.app"
+          def api(path, data=None, method=None, ctype="application/json"):
+              req = urllib.request.Request(f"https://api.netlify.com/api/v1{path}",
+                  data=data, method=method,
+                  headers={"Authorization": f"Bearer {tok}", "Content-Type": ctype})
+              return urllib.request.urlopen(req)
+          atuais = json.load(api(f"/sites/{site}/files"))
+          mapa = {f["path"]: f["sha"] for f in atuais}
+          conteudo = open("app/linhas.js", "rb").read()
+          sha = hashlib.sha1(conteudo).hexdigest()
+          mapa["/linhas.js"] = sha
+          dep = json.load(api(f"/sites/{site}/deploys",
+                              data=json.dumps({"files": mapa, "async": False}).encode()))
+          if sha in (dep.get("required") or []):
+              api(f"/deploys/{dep['id']}/files/linhas.js", data=conteudo, method="PUT",
+                  ctype="application/octet-stream")
+          print("deploy", dep["id"], "ok — só linhas.js atualizado")
+          EOF
