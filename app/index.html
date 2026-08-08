@@ -2526,8 +2526,14 @@ function renderTime(){
     const seq = [...f.res].reverse();
     const boxes = seq.map((r, i) => `<span class="bx ${i === seq.length-1 ? "last" : ""} ${r === "v" ? "hit" : ""}" style="${r === "d" ? "color:#E05A4E" : ""}">${r.toUpperCase()}</span>`).join("");
     const seqsHTML = f.seqs.map(s => `<div class="qt-seqline"><span class="ico">${svgIco(s.icon)}</span>${s.txt}</div>`).join("");
-    const tendHTML = f.tend.map(td => `<div class="tend-row ${td.pct >= 70 ? "hot" : ""}">
+    // só o que bateu 70%+ (Pedro 08/08) — tendência morna é ruído no perfil
+    const tend70 = f.tend.filter(td => td.pct >= 70);
+    ULT_TT_ROWS = tend70.map(td => ({ ...td, time: t.nome, tid }));
+    const icoCard = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>`;
+    const tendHTML = tend70.map((td, i) => `<div class="tend-row hot">
         <span class="tend-ico">${td.icon || ""}</span><span class="tend-txt">${td.txt}</span>
+        ${td.pts ? `<span class="card-tgl" title="Gerar card · gráfico" onclick="abrirCardTendTime(${i}, 'grafico')">${svgIco("grafico")}</span>
+        <span class="card-tgl" title="Gerar card · números" onclick="abrirCardTendTime(${i}, 'numeros')">${icoCard}</span>` : ""}
         <span class="tend-bar"><span style="width:${td.pct}%"></span></span>
         <span class="tend-hit">${td.hit} de ${td.n}</span></div>`).join("");
     formaHTML = `
@@ -3282,6 +3288,21 @@ async function desenharGrafico(){
     else { x.fillStyle = "#1F1F26"; x.fillRect(cur, yT - cr/2, cr, cr); }
     x.restore();
     x.textAlign = "left"; x.fillStyle = "#F5F5F7"; x.fillText(c.time.nome, cur + cr + 16, yT);
+    x.textAlign = "center";
+  } else if (!c.fx.away){
+    // card de TIME solto (tendência do perfil): só escudo + nome, sem "×"
+    const imH = await carregaImg(SC_ASSETS.escudos?.[c.fx.home]);
+    const yT = Y(oHeader);
+    x.font = `800 40px ${UI}`;
+    const nHW = x.measureText(c.fx.home).width;
+    const cr = 64, gap = 14;
+    let cur = cx - (cr + gap + nHW) / 2;
+    x.save(); x.beginPath(); x.roundRect(cur, yT - cr/2, cr, cr, 15); x.clip();
+    if (imH) x.drawImage(imH, cur, yT - cr/2, cr, cr);
+    else { x.fillStyle = "#1F1F26"; x.fillRect(cur, yT - cr/2, cr, cr); }
+    x.restore();
+    cur += cr + gap;
+    x.textAlign = "left"; x.fillStyle = "#F5F5F7"; x.fillText(c.fx.home, cur, yT);
     x.textAlign = "center";
   } else {
     const [imH, imA] = await Promise.all([
@@ -5108,11 +5129,15 @@ function formaTime(tid, ligaId, escopo){
   if (sMarca >= 3) seqs.push({ icon: "bola", txt: `Marcou gol nos últimos ${sMarca}` });
   // tendências (direção dominante, com aproveitamento)
   const mk = (getter, linha, label) => {
-    const vals = jogos.map(getter).filter(x => x != null);
-    if (!vals.length) return null;
-    const over = vals.filter(x => x > linha).length, under = vals.length - over;
+    const pts = jogos.map(j => ({ v: getter(j), adv: j.advNome || "", ts: j.ts || "" }))
+      .filter(p => p.v != null);
+    if (!pts.length) return null;
+    const over = pts.filter(p => p.v > linha).length, under = pts.length - over;
     const mais = over >= under, hit = mais ? over : under;
-    return { txt: `${mais?"Mais":"Menos"} de ${String(linha).replace(".",",")} ${label}`, hit, n: vals.length, pct: Math.round(hit/vals.length*100) };
+    for (const p of pts) p.hit = mais ? p.v > linha : p.v < linha;
+    return { txt: `${mais?"Mais":"Menos"} de ${String(linha).replace(".",",")} ${label}`,
+             hit, n: pts.length, pct: Math.round(hit/pts.length*100),
+             linha, mais, pts: [...pts].reverse() };   // pts: mais antigo → mais recente
   };
   const mkBool = (pred, txtSim, txtNao) => {
     const sim = jogos.filter(pred).length, nao = jogos.length - sim;
@@ -5899,6 +5924,26 @@ const DJ_TMETA = {
 let ULT_DJ_ROWS = [];
 
 /* tela FOCADA do desajuste: só aquele mercado — gráfico, números e gerar card */
+let ULT_TT_ROWS = [];
+function abrirCardTendTime(i, modo){
+  const td = ULT_TT_ROWS[i]; if (!td || !td.pts) return;
+  const media = td.pts.reduce((a, p) => a + p.v, 0) / td.pts.length;
+  const label = `${td.txt} · ${td.time}`;
+  const contexto = `últimos ${td.n} jogos do ${td.time}`;
+  const fxFake = { home: td.time, away: "", competicao: "", kickoff: "" };
+  if (modo === "grafico"){
+    state.card = { tipo: "grafico", formato: "sticker", fx: fxFake, label, dec: 1, sufixo: "",
+                   linha: td.linha, contexto,
+                   destaque: { media, linha: td.linha, edge: td.mais ? media - td.linha : td.linha - media },
+                   series: [{ nome: td.time, cor: "#2AE86B", pts: td.pts, media }] };
+  } else {
+    state.card = { tipo: "tendencia", formato: "sticker", fx: fxFake, label,
+                   linha: td.linha, contexto,
+                   tH: { pts: td.pts.slice(-10), hit: td.hit, n: td.n },
+                   tA: { pts: [], hit: 0, n: 0 } };
+  }
+  montarCardModal();
+}
 function abrirDesajusteFoco(i){
   const r = ULT_DJ_ROWS[i]; if (!r) return;
   const janela = 15;   // coleta 15; a tela alterna L5/L10/L15 (coeficiente segue L10)
