@@ -6218,13 +6218,7 @@ function renderDesajustes(){
       const meta = T_META[tipo]; if (!meta) continue;
       if (statFiltro !== "todos" && statFiltro !== meta.chip) continue;
       for (const [sub, ladder] of Object.entries(subs)){
-        const escada = Object.entries(ladder).map(([L, o]) => [parseFloat(L), o])
-          .filter(([L, o]) => !isNaN(L) && o != null).sort((a, b) => a[0] - b[0]);
-        if (!escada.length) continue;
-        const jogaveis = escada.filter(([L, o]) => o >= 1.5);
-        const linha = jogaveis.length
-          ? jogaveis.reduce((a, b) => Math.abs(a[1] - 1.9) < Math.abs(b[1] - 1.9) ? a : b)[0]
-          : escada[escada.length - 1][0];
+        // amostras (com adversário/data pro tooltip)
         let vals;
         let valsH = null, valsA = null, amostra = null, amH = null, amA = null;
         const amostraDe = (tid2, getter) => getJogosRx(tid2, fx.ligaId, 15, "geral", null)
@@ -6240,22 +6234,28 @@ function renderDesajustes(){
         }
         if (vals.length < 5) continue;
         const media = vals.reduce((a, b) => a + b, 0) / vals.length;
-        const edgeOver = media - linha;
-        if (Math.abs(edgeOver) > (CAP[meta.chip] || 4)) continue;
-        const rdir = edgeOver >= 0 ? "over" : "under";
-        const edge = Math.abs(edgeOver);
-        if (rdir === "under"){
-          if (edge > (DJ_CAP_UNDER[meta.chip] ?? (CAP[meta.chip] || 4))) continue;
-          const oddOver = (escada.find(([L]) => L === linha) || [])[1];
-          if (!(oddOver != null && oddOver <= 2.6)) continue;
+        // REGRA DE OURO (Pedro 08/08): só mostra lado com odd REAL coletada >= 1,50.
+        // over ancora na escada do "Mais de"; under na do "Menos de" — sem inferência.
+        const escadaDe = obj => Object.entries(obj || {}).map(([L, o]) => [parseFloat(L), o])
+          .filter(([L, o]) => !isNaN(L) && o != null).sort((a, b) => a[0] - b[0]);
+        const direcoes = [["over", escadaDe(ladder)],
+                          ["under", escadaDe(((jg.timeU || {})[tipo] || {})[sub])]];
+        for (const [rdir, escada] of direcoes){
+          const jogaveis = escada.filter(([L, o]) => o >= 1.5);
+          if (!jogaveis.length) continue;
+          const linha = jogaveis.reduce((a, b) => Math.abs(a[1] - 1.9) < Math.abs(b[1] - 1.9) ? a : b)[0];
+          const edge = rdir === "over" ? media - linha : linha - media;
+          if (edge <= 0) continue;   // sem vantagem na direção da odd real
+          const cap = rdir === "under" ? (DJ_CAP_UNDER[meta.chip] ?? (CAP[meta.chip] || 4)) : (CAP[meta.chip] || 4);
+          if (edge > cap) continue;
+          const nome = sub === "total" ? `${fx.home} x ${fx.away}` : sub === "t1" ? fx.home : fx.away;
+          porChave.set(`time:${fid}:${tipo}:${sub}:${rdir}`, {
+            fi, fx, tid: sub === "t2" ? fx.awayId : fx.homeId, nome, tipo, sub, dir: rdir,
+            stat: meta.chip, statLbl: `${meta.lbl}${sub === "total" ? " na partida" : ""}`,
+            linha, media, edge, vals: vals.slice(0, janela), valsH, valsA, amostra, amH, amA,
+            hit: vals.filter(v => rdir === "over" ? v > linha : v < linha).length, n: vals.length,
+            ehCasa: sub !== "t2", ehTime: true });
         }
-        const nome = sub === "total" ? `${fx.home} x ${fx.away}` : sub === "t1" ? fx.home : fx.away;
-        porChave.set(`time:${fid}:${tipo}:${sub}`, {
-          fi, fx, tid: sub === "t2" ? fx.awayId : fx.homeId, nome, tipo, sub, dir: rdir,
-          stat: meta.chip, statLbl: `${meta.lbl}${sub === "total" ? " na partida" : ""}`,
-          linha, media, edge, vals: vals.slice(0, janela), valsH, valsA, amostra, amH, amA,
-          hit: vals.filter(v => rdir === "over" ? v > linha : v < linha).length, n: vals.length,
-          ehCasa: sub !== "t2", ehTime: true });
       }
     }
   }

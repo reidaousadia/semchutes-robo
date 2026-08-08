@@ -79,8 +79,8 @@ M_JOG = {
 }
 RE_JOG_NOME = re.compile(r"\(([^()]+?)(?:\s*\([A-Z]{2,4}\))?\)")  # "(Nome (GRE))" → Nome
 
-def extrai_linhas(oddIds, odds_por_id):
-    """dict linha → odd do Mais de"""
+def extrai_linhas(oddIds, odds_por_id, lado="mais"):
+    """dict linha → odd do lado pedido ("mais" = over · "menos" = under)"""
     out = {}
     flat = []
     for x in oddIds or []:
@@ -89,7 +89,7 @@ def extrai_linhas(oddIds, odds_por_id):
         o = odds_por_id.get(oid)
         if not o: continue
         nome = str(o.get("name", ""))
-        if not nome.lower().startswith("mais"): continue
+        if not nome.lower().startswith(lado): continue
         sv = o.get("sv")
         try: linha = float(sv)
         except (TypeError, ValueError): continue
@@ -102,7 +102,7 @@ def coleta_evento(ev_id):
     cms = {c["id"]: c for c in (d.get("childMarkets") or [])}
     odds_por_id = {o["id"]: o for o in (d.get("odds") or [])}
     comp = [c.get("name", "") for c in (d.get("competitors") or [])]
-    time_out, jog_out = {}, {}
+    time_out, time_u_out, jog_out = {}, {}, {}
 
     for m in mks:
         nome = str(m.get("name", ""))
@@ -122,11 +122,17 @@ def coleta_evento(ev_id):
         if alvo:
             chave, sub = alvo
             linhas = extrai_linhas(m.get("desktopOddIds"), odds_por_id)
+            linhas_u = extrai_linhas(m.get("desktopOddIds"), odds_por_id, "menos")
             for cid in m.get("childMarketIds") or []:
                 c = cms.get(cid)
-                if c: linhas.update(extrai_linhas(c.get("desktopOddIds") or c.get("oddIds"), odds_por_id))
+                if c:
+                    ids = c.get("desktopOddIds") or c.get("oddIds")
+                    linhas.update(extrai_linhas(ids, odds_por_id))
+                    linhas_u.update(extrai_linhas(ids, odds_por_id, "menos"))
             if linhas:
                 time_out.setdefault(chave, {})[sub] = linhas
+            if linhas_u:
+                time_u_out.setdefault(chave, {})[sub] = linhas_u
             continue
         # --- mercados de JOGADOR (childMarkets por atleta) ---
         stat = M_JOG.get(nome)
@@ -145,7 +151,7 @@ def coleta_evento(ev_id):
             linhas = extrai_linhas(c.get("desktopOddIds") or c.get("oddIds"), odds_por_id)
             if linhas:
                 jog_out.setdefault(jogador, {})[stat] = {"principal": principal, "linhas": linhas}
-    return time_out, jog_out
+    return time_out, time_u_out, jog_out
 
 def main():
     # jogos Apitou pra casar (dados.js)
@@ -171,14 +177,14 @@ def main():
             if not fx: continue
             time.sleep(1.2)  # educação com o servidor
             try:
-                time_out, jog_out = coleta_evento(ev["id"])
+                time_out, time_u_out, jog_out = coleta_evento(ev["id"])
             except Exception as e:
                 print(f"  erro {nomes[0]} x {nomes[1]}: {e}", flush=True)
                 continue
             if time_out or jog_out:
                 casados += 1
                 jogos_out[str(fx["id"])] = {"ev": ev["id"], "kickoff": fx["kickoff"],
-                                            "time": time_out, "jogador": jog_out}
+                                            "time": time_out, "timeU": time_u_out, "jogador": jog_out}
                 print(f"  {fx['home']} x {fx['away']}: {len(jog_out)} jogadores, "
                       f"{sum(len(v) for v in time_out.values())} linhas de time", flush=True)
 

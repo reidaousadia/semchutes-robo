@@ -146,6 +146,7 @@ def main():
             for fid, aj in (alt.get("jogos") or {}).items():
                 alvo = jogos.setdefault(fid, {"kickoff": aj.get("kickoff"), "jogador": {}, "time": {}})
                 if aj.get("time"): alvo["time"] = aj["time"]
+                if aj.get("timeU"): alvo["timeU"] = aj["timeU"]
                 # props Altenar só preenchem jogador que as casas pagas não trouxeram
                 for nome, stats in (aj.get("jogador") or {}).items():
                     for stat, reg in stats.items():
