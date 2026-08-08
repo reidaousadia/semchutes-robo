@@ -1942,10 +1942,68 @@ function go(view, playerId, qiFixture, qiPlayer, jogoIdx){
   }
   if (view !== "aovivo") pausarSimulacao();
   window.scrollTo({ top:0, behavior: prefersReduced() ? "auto":"smooth" });
-  if (!histMudo) history.pushState(navSnapshot(), "");
+  if (!histMudo) history.pushState(navSnapshot(), "", rotaAtual());
   render();
 }
 function prefersReduced(){ return window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
+
+/* ---------- ROTAS na URL: F5 recarrega a MESMA tela com dados frescos ----------
+   cada tela vira um hash (#/desajustes, #/jogo/<id>...); no boot a URL é lida
+   e a tela reaberta — atualizar a página não joga mais o usuário pra home */
+function rotaAtual(){
+  const v = state.view;
+  const fx = FIXTURES[state.jogoAberto];
+  if (v === "times") return "#/times";
+  if (v === "ranking") return "#/ranking";
+  if (v === "search") return "#/jogadores";
+  if (v === "desajustes" || v === "djfoco") return "#/desajustes";
+  if (v === "time" && state.timeAberto != null) return `#/time/${state.timeAberto}`;
+  if (v === "jogo" && fx) return `#/jogo/${fx.id}`;
+  if (v === "arbitro" && fx) return `#/arbitro/${fx.id}`;
+  if (v === "jogador" && state.j2){
+    const f2 = FIXTURES[state.j2.fi];
+    if (f2) return `#/jogador/${f2.id}/${state.j2.side}/${state.j2.idx}`;
+  }
+  return "#/";
+}
+function aplicarRotaInicial(){
+  const h = location.hash.replace(/^#\/?/, "");
+  if (!h) return false;
+  const p = h.split("/");
+  const fiPorId = id => Object.keys(FIXTURES).find(k => String((FIXTURES[k] || {}).id) === String(id));
+  switch (p[0]){
+    case "times": go('times'); return true;
+    case "ranking": go('ranking'); return true;
+    case "jogadores": go('search'); return true;
+    case "desajustes": go('desajustes'); return true;
+    case "time": {
+      const tid = +p[1];
+      if (TIME_INDEX[tid]){ state.timeAberto = tid; go('time'); return true; }
+      go('times'); return true;
+    }
+    case "jogo": {
+      const fi = fiPorId(p[1]);
+      if (fi != null){ go('jogo', null, null, null, +fi); return true; }
+      return false;
+    }
+    case "arbitro": {
+      const fi = fiPorId(p[1]);
+      if (fi != null){ state.jogoAberto = +fi; state.arbJanela = 10; state.arbEscopo = "geral"; go('arbitro'); return true; }
+      return false;
+    }
+    case "jogador": {
+      const fi = fiPorId(p[1]);
+      if (fi != null){
+        const fx = FIXTURES[fi];
+        const tid = p[2] === "home" ? fx.homeId : fx.awayId;
+        const idx = +p[3];
+        if ((ELENCOS[String(tid)] || [])[idx]){ state.j2 = { fi: +fi, side: p[2], idx }; go('jogador'); return true; }
+      }
+      return false;
+    }
+  }
+  return false;
+}
 
 /* ---------- botão VOLTAR do celular = voltar de tela DENTRO do app ----------
    cada go() empurra uma entrada no histórico do navegador; popstate restaura o
@@ -1973,7 +2031,7 @@ addEventListener("popstate", e => {
     go(s.view);
   } finally { histMudo = false; }
 });
-addEventListener("load", () => { try { history.replaceState(navSnapshot(), ""); } catch(_){} });
+addEventListener("load", () => { try { history.replaceState(navSnapshot(), "", rotaAtual()); } catch(_){} });
 
 /* ---------- filter chips (competições reais da semana) ---------- */
 function leagueChips(){
@@ -6187,6 +6245,6 @@ function initCookies(){
 
 /* ---------- boot ---------- */
 setThemeIcon();
-go("oportunidades");
+if (!aplicarRotaInicial()) go("oportunidades");
 initCookies();
 </script>
