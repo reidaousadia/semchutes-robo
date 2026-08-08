@@ -3275,12 +3275,13 @@ async function desenharGrafico(){
       const temLinha = c.linha != null && p.hit !== undefined;
       const corMiss = temLinha ? "rgba(254,44,85,0.45)" : "rgba(255,255,255,0.10)";
       const corMissTxt = temLinha ? "#FE2C55" : "#6B6B76";
+      const corHit = temLinha ? "#2AE86B" : s.cor;   // identidade: bateu = verde, sempre
       const bh = Math.max(8, (p.v / max) * (bottom - top - 26));
       const by = bottom - bh;
-      x.fillStyle = apagada ? corMiss : s.cor;
+      x.fillStyle = apagada ? corMiss : corHit;
       x.beginPath(); x.roundRect(bx - barW/2, by, barW, bh, 6); x.fill();
       x.textAlign = "center"; x.font = `800 24px ${UI}`;
-      x.fillStyle = apagada ? corMissTxt : s.cor;
+      x.fillStyle = apagada ? corMissTxt : corHit;
       x.fillText(String(Number.isInteger(p.v) ? p.v : fmt(p.v, c.dec)) + (c.sufixo || ""), bx, by - 17);
       let adv = p.adv;
       x.font = `500 16px ${MONO}`;
@@ -5817,7 +5818,7 @@ let ULT_DJ_ROWS = [];
 /* tela FOCADA do desajuste: só aquele mercado — gráfico, números e gerar card */
 function abrirDesajusteFoco(i){
   const r = ULT_DJ_ROWS[i]; if (!r) return;
-  const janela = state.djJanela || 10;
+  const janela = 15;   // coleta 15; a tela alterna L5/L10/L15 (coeficiente segue L10)
   const fx = r.fx;
   const serie = [];
   if (r.ehTime){
@@ -5860,14 +5861,17 @@ function abrirCardDesajuste(modo){
   const label = `Mais de ${linhaTxt} ${f.statLbl}${f.ehTime ? "" : " · " + f.nome}`;
   const contexto = `média ${fmt(f.media, 1).replace(".", ",")} · linha ${linhaTxt} · ${fmt(Math.abs(f.edge), 1).replace(".", ",")} ${f.edge >= 0 ? "acima" : "abaixo"} da linha`;
   const CORES = ["#2AE86B", "#FE2C55"];
+  const jan = state.djFocoJan || 10;
+  const corta = s => ({ ...s, pts: s.pts.filter(p => p.jogou !== false).slice(-jan) });
   if (modo === "grafico"){
     state.card = { tipo: "grafico", formato: "sticker", fx, label, dec: 1, sufixo: "",
                    linha: f.linha, contexto,
-                   series: f.serie.map((s, i) => ({ nome: s.nome, cor: CORES[i] || CORES[0], pts: s.pts,
+                   series: f.serie.map(corta).map((s, i) => ({ nome: s.nome, cor: CORES[i] || CORES[0], pts: s.pts,
                      media: s.pts.reduce((a, p) => a + p.v, 0) / s.pts.length })) };
   } else {
-    const t = s => s ? { pts: s.pts.slice(-10), hit: s.pts.filter(p => p.hit).length, n: s.pts.length }
-                     : { pts: [], hit: 0, n: 0 };
+    const t = s0 => { if (!s0) return { pts: [], hit: 0, n: 0 };
+      const s = corta(s0);
+      return { pts: s.pts.slice(-10), hit: s.pts.filter(p => p.hit).length, n: s.pts.length }; };
     state.card = { tipo: "tendencia", formato: "sticker",
                    fx: { ...fx, home: f.serie[0].nome, away: f.serie[1] ? f.serie[1].nome : "" },
                    label, linha: f.linha, contexto,
@@ -5875,6 +5879,7 @@ function abrirCardDesajuste(modo){
   }
   montarCardModal();
 }
+function setDjFocoJan(n){ state.djFocoJan = n; render(); }
 function renderDesajusteFoco(){
   const el = document.getElementById("view");
   const f = state.djFoco;
@@ -5882,7 +5887,25 @@ function renderDesajusteFoco(){
   const fx = FIXTURES[f.fi] || {};
   const linhaTxt = String(f.linha).replace(".", ",");
   const positivo = f.edge >= 0;
-  const bloco = s => {
+  const jan = state.djFocoJan || 10;
+  // faixa L5/L10/L15: % de acerto somando as séries (padrão PropsCash)
+  const pctJan = n => {
+    let hit = 0, tot = 0;
+    for (const s of f.serie){
+      const jog = s.pts.filter(p => p.jogou !== false).slice(-n);
+      hit += jog.filter(p => p.hit).length; tot += jog.length;
+    }
+    return tot ? { pct: Math.round(hit / tot * 100), hit, tot } : null;
+  };
+  const faixa = [5, 10, 15].map(n => {
+    const r = pctJan(n); if (!r) return "";
+    return `<button class="chip ${jan === n ? "on" : ""}" onclick="setDjFocoJan(${n})" style="flex-direction:column; line-height:1.2">
+      <span style="font-size:11px; font-weight:700">L${n}</span>
+      <span class="tnum" style="font-size:14px; font-weight:800; color:${jan === n ? "inherit" : (r.pct >= 70 ? "var(--pos)" : r.pct <= 40 ? "var(--amber)" : "var(--text-dim)")}">${r.pct}%</span>
+    </button>`;
+  }).join("");
+  const bloco = sFull => {
+    const s = { ...sFull, pts: sFull.pts.slice(-jan) };
     const jogados = s.pts.filter(p => p.jogou !== false);
     const maxV = Math.max(...jogados.map(p => p.v), f.linha, 0.001);
     const chartH = 130, rodape = 34;
@@ -5929,6 +5952,7 @@ function renderDesajusteFoco(){
         </div>
       </div>
       <div class="rx-sample" style="margin-top:10px; text-align:left">em português claro: a casa abriu a linha em <b>${linhaTxt}</b>, mas a média real é <b>${fmt(f.media, 1)}</b> — ou seja, o número vem ficando <b style="color:${positivo ? "var(--pos)" : "var(--amber)"}">${fmt(Math.abs(f.edge), 1)} ${positivo ? "ACIMA" : "ABAIXO"}</b> do que a linha sugere. Quanto maior essa distância, maior o desajuste.</div>
+      <div class="filters" style="margin-top:12px">${faixa}</div>
       ${f.serie.map(bloco).join("")}
       <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap">
         <button class="h2h-cardbtn" style="flex:1; min-width:180px; margin:0" onclick="abrirCardDesajuste('grafico')">${svgIco("grafico")} Gerar card · gráfico</button>
@@ -5952,7 +5976,7 @@ function abrirDesajuste(fi, tid, nomeB64, statKey, linha){
 }
 function renderDesajustes(){
   const el = document.getElementById("view");
-  const janela = state.djJanela || 10;
+  const janela = 10;   // base fixa do coeficiente de desajuste (padrão PropsCash)
   const statFiltro = state.djStat || "todos";
   const fxPorId = {};
   Object.keys(FIXTURES).forEach(k => { const f = FIXTURES[k]; if (f && f.id != null) fxPorId[String(f.id)] = [k, f]; });
@@ -6047,7 +6071,7 @@ function renderDesajustes(){
   const top = rows.slice(0, 40);
   ULT_DJ_ROWS = top;
   const chipS = (k, lbl) => `<button class="chip ${statFiltro===k?'on':''}" onclick="state.djStat='${k}'; render()">${lbl}</button>`;
-  const chipJ = n => `<button class="chip ${janela===n?'on':''}" onclick="state.djJanela=${n}; render()">Últimos ${n}</button>`;
+
   const linhaHTML = r => {
     const positivo = r.edge >= 0;
     const barras = [...r.vals].reverse().map((v, i, arr) =>
@@ -6074,7 +6098,7 @@ function renderDesajustes(){
     <div class="section-h" style="margin-top:6px"><span class="lbl">Desajustes</span><span class="count tnum">${rows.length} linhas analisadas</span></div>
     <div class="rx-sample" style="margin:2px 0 10px">onde a média do jogador mais destoa da linha típica do jogo — maiores diferenças primeiro${LINHAS.geradoEm ? ` · linhas de ${LINHAS.geradoEm.slice(8,10)}/${LINHAS.geradoEm.slice(5,7)} ${LINHAS.geradoEm.slice(11,16)}` : ""}</div>
     <div class="filters" style="margin-bottom:6px">${chipS("todos","Todas")}${chipS("fin","Finalizações")}${chipS("chutesGol","Chutes a gol")}${chipS("gols","Gols")}${chipS("cartoes","Cartões")}${chipS("desarmes","Desarmes")}${chipS("faltas","Faltas")}${chipS("tCantos","Escanteios · time")}${chipS("tCartoes","Cartões · time")}${chipS("tGols","Gols · time")}</div>
-    <div class="filters" style="margin-bottom:12px">${chipJ(5)}${chipJ(10)}</div>
+
     ${top.length ? top.map(linhaHTML).join("")
       : `<div class="empty-box">Sem linhas disponíveis agora — elas abrem perto dos jogos e são atualizadas 3x ao dia.</div>`}
     ${sourceNoteQI()}`;
