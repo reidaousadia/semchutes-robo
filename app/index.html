@@ -3023,19 +3023,16 @@ function renderOportunidades(){
   <div class="home-grid">
     ${sideHTML}
     <div class="home-main">
-    <div class="hero">
-      <div class="hero-row">
-        <div>
-          <div class="eyebrow" style="color:var(--acc); margin-bottom:8px">Estatística de futebol · sem garimpo</div>
-          <h1>Agenda de<br>jogos</h1>
-          <p class="sub2">Toque num jogo e veja o <b>raio-x completo</b> — médias dos times e de cada jogador, o que hoje você caça jogo por jogo em vários sites.</p>
-        </div>
-        <div class="opp-counter">
-          <div><div class="n tnum">${visiveis.length}</div><div class="l">jogos<br>${filtro==='semana'?'na semana':'no filtro'}</div></div>
-        </div>
-      </div>
-    </div>
-    <div class="filters" style="margin-top:20px">
+    ${(() => {
+      // home DIRETO AO JOGO (opção A, Pedro 08/08): data + contagem numa linha, sem hero
+      const hoje = new Date();
+      const dia = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" }).format(hoje);
+      return `<div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-top:6px">
+        <div style="font-weight:800; font-size:19px; letter-spacing:-0.01em">${dia[0].toUpperCase() + dia.slice(1)}</div>
+        <div class="tnum" style="font-family:var(--f-mono); font-size:12px; color:var(--muted); flex:none">${visiveis.length} jogo${visiveis.length === 1 ? "" : "s"} ${filtro === "semana" ? "na semana" : "no filtro"}</div>
+      </div>`;
+    })()}
+    <div class="filters" style="margin-top:14px">
       ${chipD("hoje", "Hoje")}${chipD("amanha", "Amanhã")}${chipD("depois", "Depois de amanhã")}${chipD("semana", "Semana toda")}
     </div>
     ${compsAll.length > 1 ? `<div class="filters filtros-mobile" style="margin-top:8px">
