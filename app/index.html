@@ -240,6 +240,9 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
 
   .phead { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
   .phead .avatar { width: 66px; height: 66px; border-radius: 16px; font-size: 24px; }
+  .phead .crest { width: 66px; height: 66px; border-radius: 16px; flex: none;
+    display: grid; place-items: center; overflow: hidden; font-size: 18px; }
+  .phead .crest img { width: 100%; height: 100%; object-fit: contain; }
   .phead h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.025em; margin: 0; }
   .phead .pmeta { display: flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 14px; margin-top: 3px; }
   .badge {
