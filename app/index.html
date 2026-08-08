@@ -6196,12 +6196,9 @@ function renderDesajustes(){
         // média acima → "Mais de"; média abaixo → "Menos de"; edge = |desvio|
         const rdir = edgeOver >= 0 ? "over" : "under";
         const edge = Math.abs(edgeOver);
-        if (rdir === "under"){
-          if (edge > (DJ_CAP_UNDER[stat] ?? (CAP[stat] || 3))) continue;
-          // regra do 1,50 no lado UNDER: over caro na linha = under cadeado
-          const oddOver = reg.l[String(linha)];
-          if (!(oddOver != null && oddOver <= 2.6)) continue;
-        }
+        // props de JOGADOR são mercados de marco ("Mais de" apenas) — nenhuma casa
+        // oferece o lado "Menos de" (Pedro 08/08); under sintético aqui é inapostável
+        if (rdir === "under") continue;
         const chave = `${tid}:${nome}:${stat}`;
         const atual = porChave.get(chave);
         if (atual && (PRIO[atual.casa] ?? 9) <= (PRIO[reg.c] ?? 9)) continue;
