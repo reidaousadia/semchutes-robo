@@ -825,7 +825,8 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   /* estrela SEMPRE visível (favoritar liga é recurso, não segredo) */
   .ls-pin { flex: none; color: var(--muted); font-size: 17px; padding: 0 3px; opacity: .8; transition: opacity .12s, color .12s; }
   .ls-item:hover .ls-pin { opacity: 1; }
-  .ls-pin.on { color: var(--amber); opacity: 1; }
+  .ls-pin.on { color: #F0B14A; opacity: 1; }   /* estrela = dourada, sempre */
+  .comp-fav { font-size: 20px; cursor: pointer; padding: 0 4px; margin-left: 2px; flex: none; }
 
   /* seletor de competições na home (fileira rolável) */
   .comp-scroll { display: flex; gap: 6px; margin-top: 8px; overflow-x: auto; padding-bottom: 6px;
@@ -2448,7 +2449,10 @@ function listaTimesHTML(q){
     570, 109, 307, 468, 1251,                // Copa do Rei, Copa Alemanha, Copa França, Taça Portugal, Supercopa Esp
   ];
   const posSecao = lid => { const i = ORDEM_SECOES.indexOf(+lid); return i === -1 ? 999 : i; };
+  const favLigas = getFavLigas();
   const secoes = [...porLiga.entries()].sort((a, b) => {
+    const fa = favLigas.includes(+a[0]) ? 0 : 1, fb = favLigas.includes(+b[0]) ? 0 : 1;
+    if (fa !== fb) return fa - fb;                       // favoritas furam a fila
     const ia = posSecao(a[0]), ib = posSecao(b[0]);
     if (ia !== ib) return ia - ib;
     if (b[1].length !== a[1].length) return b[1].length - a[1].length;
@@ -2982,7 +2986,7 @@ function renderOportunidades(){
       (favL.includes(b.ligaId) ? 1 : 0) - (favL.includes(a.ligaId) ? 1 : 0));
     const blocos = compsOrd.map(c => `
       <div class="comp-block">
-        <div class="comp-head"><span class="comp-name">${bandeiraDe(c.ligaId)} ${c.comp}</span><span class="comp-count">${c.jogos.length} jogo${c.jogos.length===1?"":"s"}</span></div>
+        <div class="comp-head"><span class="comp-name">${bandeiraDe(c.ligaId)} ${c.comp}</span><span class="ls-pin comp-fav ${favL.includes(c.ligaId) ? "on" : ""}" onclick="toggleFavLiga(event, ${c.ligaId})" title="${favL.includes(c.ligaId) ? "Remover das favoritas" : "Favoritar competição"}">${favL.includes(c.ligaId) ? "★" : "☆"}</span><span class="comp-count" style="margin-left:auto">${c.jogos.length} jogo${c.jogos.length===1?"":"s"}</span></div>
         <div class="fx-list">${rowsDoComp(c.jogos)}</div>
       </div>`).join("");
     return `<div class="day-block">
