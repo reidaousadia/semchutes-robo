@@ -827,6 +827,8 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   .ls-item:hover .ls-pin { opacity: 1; }
   .ls-pin.on { color: #F0B14A; opacity: 1; }   /* estrela = dourada, sempre */
   .comp-fav { font-size: 20px; cursor: pointer; padding: 0 4px; margin-left: 2px; flex: none; }
+  .fx-fav { font-size: 15px; cursor: pointer; padding: 0 3px; flex: none; opacity: .45; }
+  .fx-fav.on { opacity: 1; }
 
   /* seletor de competições na home (fileira rolável) */
   .comp-scroll { display: flex; gap: 6px; margin-top: 8px; overflow-x: auto; padding-bottom: 6px;
@@ -2969,12 +2971,14 @@ function renderOportunidades(){
   });
   porDia.sort((a, b) => a.dia.localeCompare(b.dia));
 
+  const favTimes = getFavTimes();
+  const favTime = tid => `<span class="ls-pin fx-fav ${favTimes.includes(tid) ? "on" : ""}" onclick="toggleFavTime(event, ${tid})" title="Favoritar time">${favTimes.includes(tid) ? "★" : "☆"}</span>`;
   const rowsDoComp = jogos => jogos.map(({ fx, fi }) => `
       <button class="fx-row" onclick="go('jogo', null, null, null, ${fi})">
         <span class="fx-time tnum">${fmtHora(fx.kickoff)}</span>
-        <span class="fx-team home"><span class="fx-name">${fx.home}</span>${teamCrest(fx.home)}</span>
+        <span class="fx-team home">${favTime(fx.homeId)}<span class="fx-name">${fx.home}</span>${teamCrest(fx.home)}</span>
         <span class="fx-x">×</span>
-        <span class="fx-team away">${teamCrest(fx.away)}<span class="fx-name">${fx.away}</span></span>
+        <span class="fx-team away">${teamCrest(fx.away)}<span class="fx-name">${fx.away}</span>${favTime(fx.awayId)}</span>
         <span class="fx-go"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
       </button>`).join("");
 
