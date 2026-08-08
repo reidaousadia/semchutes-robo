@@ -829,6 +829,15 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   .comp-fav { font-size: 20px; cursor: pointer; padding: 0 4px; margin-left: 2px; flex: none; }
   .fx-fav { font-size: 15px; cursor: pointer; padding: 0 3px; flex: none; opacity: .45; }
   .fx-fav.on { opacity: 1; }
+  /* pull-to-refresh (só no modo app/tela de início — o navegador já tem o dele) */
+  #ptr { position: fixed; top: -58px; left: 50%; transform: translateX(-50%); z-index: 300;
+    width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--surface); border: 1.5px solid var(--border); color: var(--muted);
+    font-size: 22px; font-weight: 800; box-shadow: 0 6px 18px rgba(0,0,0,.5);
+    transition: top .18s ease, transform .05s linear; pointer-events: none; }
+  #ptr.pronto { color: var(--acc); border-color: var(--acc); }
+  #ptr.girando { animation: ptrspin .7s linear infinite; }
+  @keyframes ptrspin { to { transform: translateX(-50%) rotate(360deg); } }
 
   /* seletor de competições na home (fileira rolável) */
   .comp-scroll { display: flex; gap: 6px; margin-top: 8px; overflow-x: auto; padding-bottom: 6px;
@@ -6312,6 +6321,45 @@ function initCookies(){
   if (escolha === "nao") return;
   const b = document.getElementById("cookieBanner"); if (b) b.style.display = "flex";
 }
+
+/* ---------- pull-to-refresh no modo APP (tela de início não tem botão de recarregar) ----------
+   puxou > 80px com a página no topo → recarrega; as rotas na URL garantem que
+   volta pra MESMA tela, com dados frescos */
+(function(){
+  const modoApp = (navigator.standalone === true) ||
+    (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+  if (!modoApp) return;
+  const ind = document.createElement("div");
+  ind.id = "ptr"; ind.textContent = "↻";
+  document.body.appendChild(ind);
+  let y0 = null, puxa = 0, recarregando = false;
+  addEventListener("touchstart", e => {
+    y0 = (window.scrollY <= 0 && !recarregando) ? e.touches[0].clientY : null;
+    puxa = 0;
+  }, { passive: true });
+  addEventListener("touchmove", e => {
+    if (y0 == null) return;
+    puxa = e.touches[0].clientY - y0;
+    if (puxa > 14){
+      const p = Math.min(puxa * 0.55, 92);
+      ind.style.top = (p - 58) + "px";
+      ind.style.transform = `translateX(-50%) rotate(${p * 3}deg)`;
+      ind.classList.toggle("pronto", puxa > 80);
+    }
+  }, { passive: true });
+  addEventListener("touchend", () => {
+    if (y0 != null && puxa > 80){
+      recarregando = true;
+      ind.classList.add("girando");
+      ind.style.top = "16px";
+      setTimeout(() => location.reload(), 180);
+    } else {
+      ind.style.top = "-58px";
+      ind.classList.remove("pronto");
+    }
+    y0 = null; puxa = 0;
+  }, { passive: true });
+})();
 
 /* ---------- boot ---------- */
 setThemeIcon();
