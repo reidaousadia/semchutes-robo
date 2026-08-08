@@ -658,8 +658,10 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
     width: 9px; height: 9px; background: var(--surface); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
     z-index: 51; pointer-events: none;
   }
-  .bx.hit { color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, transparent); border-color: color-mix(in srgb, var(--amber) 30%, var(--border-soft)); }
-  .bx.last { border-width: 2px; border-color: var(--amber); font-weight: 800; }
+  /* semântica de apostador (Pedro 08/08): POSITIVO/bateu = ciano (nosso "verde"),
+     negativo/não bateu = neutro apagado; rosa fica pra derrota/alerta explícito */
+  .bx.hit { color: var(--acc); background: color-mix(in srgb, var(--acc) 12%, transparent); border-color: color-mix(in srgb, var(--acc) 30%, var(--border-soft)); }
+  .bx.last { border-width: 2px; border-color: var(--text-dim); font-weight: 800; }
   .b365 { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-top: 22px; }
   .b365-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
   .b365-t { font-weight: 800; font-size: 15px; }
@@ -1922,12 +1924,12 @@ function go(view, playerId, qiFixture, qiPlayer, jogoIdx){
     "nav-times": ["times","time"],
     "nav-search": ["search","jogador"],
     "nav-ranking": ["ranking"],
-    "nav-desajustes": ["desajustes"],
+    "nav-desajustes": ["desajustes","djfoco"],
     "bnav-hoje": ["oportunidades","jogo","jogos","arbitro"],
     "bnav-times": ["times","time"],
     "bnav-search": ["search","jogador"],
     "bnav-ranking": ["ranking"],
-    "bnav-desajustes": ["desajustes"],
+    "bnav-desajustes": ["desajustes","djfoco"],
   };
   for (const [id, views] of Object.entries(navMap)){
     const btn = document.getElementById(id);
@@ -5781,6 +5783,139 @@ function resolveJogador(nomeFeed, tids){
   }
   return null;
 }
+/* consts compartilhadas da aba Desajustes (lista + tela focada) */
+const DJ_STAT_LBL = { fin: "finalizações", chutesGol: "chutes a gol", gols: "gols",
+                      desarmes: "desarmes", faltas: "faltas cometidas", cartoes: "cartões" };
+const DJ_SEL = { fin: g => g.f, chutesGol: g => g.o, gols: g => g.g, desarmes: g => g.ds,
+                 faltas: g => g.fc, cartoes: g => (g.am != null ? (g.am || 0) + (g.vm || 0) : null) };
+// desvio máximo plausível por estatística (acima disso = homônimo/erro, não oportunidade)
+const DJ_CAP = { fin: 3, chutesGol: 3, gols: 2, desarmes: 3, faltas: 3, cartoes: 2,
+                 tCantos: 4.5, tCartoes: 3, tGols: 2.5 };
+const DJ_TMETA = {
+  cantos:  { chip: "tCantos",  lbl: "escanteios",
+             own: j => j.own?.cantos ?? null,
+             tot: j => (j.own?.cantos != null && j.adv?.cantos != null) ? j.own.cantos + j.adv.cantos : null },
+  cartoes: { chip: "tCartoes", lbl: "cartões",
+             own: j => j.own?.amarelos != null ? (j.own.amarelos || 0) + (j.own.vermelhos || 0) : null,
+             tot: j => (j.own?.amarelos != null && j.adv?.amarelos != null)
+                  ? (j.own.amarelos || 0) + (j.own.vermelhos || 0) + (j.adv.amarelos || 0) + (j.adv.vermelhos || 0) : null },
+  gols:    { chip: "tGols",    lbl: "gols",
+             own: j => j.gols ?? null,
+             tot: j => (j.gols != null && j.golsSof != null) ? j.gols + j.golsSof : null },
+};
+let ULT_DJ_ROWS = [];
+
+/* tela FOCADA do desajuste: só aquele mercado — gráfico, números e gerar card */
+function abrirDesajusteFoco(i){
+  const r = ULT_DJ_ROWS[i]; if (!r) return;
+  const janela = state.djJanela || 10;
+  const fx = r.fx;
+  const serie = [];
+  if (r.ehTime){
+    const meta = DJ_TMETA[r.tipo];
+    if (r.sub === "total"){
+      for (const [tid, nome, cor] of [[fx.homeId, fx.home, "var(--acc)"], [fx.awayId, fx.away, "#FE2C55"]]){
+        const pts = [...getJogosRx(tid, fx.ligaId, janela, "geral", null)].reverse()
+          .map(j => ({ v: meta.tot(j), hit: meta.tot(j) != null && meta.tot(j) > r.linha, adv: j.advNome || "", ts: j.ts || "" }))
+          .filter(p => p.v != null);
+        if (pts.length) serie.push({ nome, cor, pts });
+      }
+    } else {
+      const tid = r.sub === "t1" ? fx.homeId : fx.awayId;
+      const nome = r.sub === "t1" ? fx.home : fx.away;
+      const pts = [...getJogosRx(tid, fx.ligaId, janela, "geral", null)].reverse()
+        .map(j => ({ v: meta.own(j), hit: meta.own(j) != null && meta.own(j) > r.linha, adv: j.advNome || "", ts: j.ts || "" }))
+        .filter(p => p.v != null);
+      if (pts.length) serie.push({ nome, cor: "var(--acc)", pts });
+    }
+  } else {
+    const hist = getHistJogador(r.tid, r.nome, janela, "geral", fx.ligaId) || [];
+    const sel = DJ_SEL[r.stat];
+    const pts = [...hist].reverse()
+      .map(g => ({ v: sel(g), hit: sel(g) != null && sel(g) > r.linha, adv: g.a || "", ts: g.t || "" }))
+      .filter(p => p.v != null);
+    if (pts.length) serie.push({ nome: r.nome, cor: "var(--acc)", pts });
+  }
+  if (!serie.length) return;
+  state.djFoco = { fi: r.fi, nome: r.nome, ehTime: !!r.ehTime, stat: r.stat, tid: r.tid,
+                   statLbl: r.statLbl || DJ_STAT_LBL[r.stat], linha: r.linha,
+                   media: r.media, edge: r.edge, hit: r.hit, n: r.n, serie };
+  go('djfoco');
+}
+function abrirCardDesajuste(modo){
+  const f = state.djFoco; if (!f) return;
+  const fx = FIXTURES[f.fi]; if (!fx) return;
+  const linhaTxt = String(f.linha).replace(".", ",");
+  const label = `Mais de ${linhaTxt} ${f.statLbl}${f.ehTime ? "" : " · " + f.nome}`;
+  const contexto = `últimos jogos · linha ${linhaTxt}`;
+  const CORES = ["#2AE8E0", "#FE2C55"];
+  if (modo === "grafico"){
+    state.card = { tipo: "grafico", formato: "sticker", fx, label, dec: 1, sufixo: "",
+                   linha: f.linha, contexto,
+                   series: f.serie.map((s, i) => ({ nome: s.nome, cor: CORES[i] || CORES[0], pts: s.pts,
+                     media: s.pts.reduce((a, p) => a + p.v, 0) / s.pts.length })) };
+  } else {
+    const t = s => s ? { pts: s.pts.slice(-10), hit: s.pts.filter(p => p.hit).length, n: s.pts.length }
+                     : { pts: [], hit: 0, n: 0 };
+    state.card = { tipo: "tendencia", formato: "sticker",
+                   fx: { ...fx, home: f.serie[0].nome, away: f.serie[1] ? f.serie[1].nome : "" },
+                   label, linha: f.linha, contexto,
+                   tH: t(f.serie[0]), tA: t(f.serie[1]) };
+  }
+  montarCardModal();
+}
+function renderDesajusteFoco(){
+  const el = document.getElementById("view");
+  const f = state.djFoco;
+  if (!f){ go('desajustes'); return; }
+  const fx = FIXTURES[f.fi] || {};
+  const linhaTxt = String(f.linha).replace(".", ",");
+  const positivo = f.edge >= 0;
+  const bloco = s => {
+    const maxV = Math.max(...s.pts.map(p => p.v), f.linha, 0.001);
+    const chartH = 130, rodape = 34;
+    const hits = s.pts.filter(p => p.hit).length;
+    return `<div style="margin-top:16px">
+      <div style="font-weight:800; font-size:13.5px; color:${s.cor}; margin-bottom:4px">${s.nome}
+        <span style="color:var(--muted); font-weight:600; font-size:12px"> · passou em ${hits} de ${s.pts.length}</span></div>
+      <div style="position:relative">
+        <div style="position:absolute; left:0; right:0; bottom:${rodape + f.linha/maxV*chartH}px; border-top:2px solid rgba(255,255,255,0.85); z-index:2; pointer-events:none"></div>
+        <div class="tnum" style="position:absolute; left:2px; bottom:${rodape + f.linha/maxV*chartH + 4}px; font-size:11px; font-weight:800; color:var(--text); z-index:2">linha ${linhaTxt}</div>
+        <div style="display:flex; align-items:flex-end; gap:5px; height:${chartH + rodape + 20}px">
+          ${s.pts.map(p => {
+            const h = Math.max(6, p.v/maxV*chartH);
+            return `<div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%">
+              <div class="tnum" style="font-size:11.5px; font-weight:800; color:${p.hit ? "var(--acc)" : "var(--amber)"}">${p.v}</div>
+              <div style="width:100%; max-width:42px; height:${h}px; border-radius:4px 4px 0 0; background:${p.hit ? "var(--acc)" : "color-mix(in srgb, var(--amber) 55%, transparent)"}; margin-top:2px"></div>
+              <div style="height:${rodape}px; display:flex; flex-direction:column; align-items:center; padding-top:4px; width:100%">
+                <span style="font-size:9px; color:var(--txt3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%">${p.adv}</span>
+                <span class="tnum" style="font-size:9px; color:var(--txt3)">${p.ts.slice(5).split("-").reverse().join("/")}</span>
+              </div></div>`;
+          }).join("")}
+        </div></div></div>`;
+  };
+  el.innerHTML = `
+    <button class="back" onclick="go('desajustes')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg> Desajustes</button>
+    <p class="eyebrow">${fx.competicao || ""} · ${fx.home || ""} x ${fx.away || ""}</p>
+    <h1 class="page" style="font-size:26px">${f.ehTime ? f.nome : f.nome}</h1>
+    <div class="rx-card" style="margin-top:12px">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px">
+        <div>
+          <div style="font-weight:800; font-size:17px">Mais de ${linhaTxt} ${f.statLbl}</div>
+          <div style="color:var(--text-dim); font-size:13px; margin-top:3px">média ${fmt(f.media, 1)} · passou a linha em ${f.hit} de ${f.n} jogos</div>
+        </div>
+        <div class="tnum" style="font-size:34px; font-weight:800; flex:none; color:${positivo ? "var(--acc)" : "var(--amber)"}">${positivo ? "+" : ""}${fmt(f.edge, 1)}</div>
+      </div>
+      ${f.serie.map(bloco).join("")}
+      <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap">
+        <button class="h2h-cardbtn" style="flex:1; min-width:180px; margin:0" onclick="abrirCardDesajuste('grafico')">${svgIco("grafico")} Gerar card · gráfico</button>
+        <button class="h2h-cardbtn" style="flex:1; min-width:180px; margin:0" onclick="abrirCardDesajuste('numeros')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4M8 11l4 4 4-4M12 15V3"/></svg> Gerar card · números</button>
+      </div>
+      ${!f.ehTime ? `<button class="expand-btn" style="margin-top:12px" onclick="abrirDesajuste(${f.fi}, ${f.tid}, '${btoa(unescape(encodeURIComponent(f.nome)))}', '${f.stat}', ${f.linha})">Ver perfil completo do jogador ›</button>` : ""}
+    </div>
+    ${sourceNoteQI()}`;
+}
+
 function abrirDesajuste(fi, tid, nomeB64, statKey, linha){
   const nome = decodeURIComponent(escape(atob(nomeB64)));   // base64 evita aspas/acentos no onclick
   const fx = FIXTURES[fi]; if (!fx) return;
@@ -5798,13 +5933,7 @@ function renderDesajustes(){
   const statFiltro = state.djStat || "todos";
   const fxPorId = {};
   Object.keys(FIXTURES).forEach(k => { const f = FIXTURES[k]; if (f && f.id != null) fxPorId[String(f.id)] = [k, f]; });
-  const STAT_LBL = { fin: "finalizações", chutesGol: "chutes a gol", gols: "gols",
-                     desarmes: "desarmes", faltas: "faltas cometidas", cartoes: "cartões" };
-  const SEL = { fin: g => g.f, chutesGol: g => g.o, gols: g => g.g, desarmes: g => g.ds,
-                faltas: g => g.fc, cartoes: g => (g.am != null ? (g.am || 0) + (g.vm || 0) : null) };
-  // desvio máximo plausível por estatística (acima disso = homônimo/erro, não oportunidade)
-  const CAP = { fin: 3, chutesGol: 3, gols: 2, desarmes: 3, faltas: 3, cartoes: 2,
-                tCantos: 4.5, tCartoes: 3, tGols: 2.5 };
+  const STAT_LBL = DJ_STAT_LBL, SEL = DJ_SEL, CAP = DJ_CAP;
   // mesmo jogador pode vir de mais de uma fonte — fica a de maior prioridade
   const PRIO = { betano: 0, bet365: 1, estrela: 2, altenar: 3 };
   const porChave = new Map();
@@ -5849,18 +5978,7 @@ function renderDesajustes(){
     }
   }
   // ---- linhas de TIME (escanteios / cartões / gols — pedido do Pedro 08/08) ----
-  const T_META = {
-    cantos:  { chip: "tCantos",  lbl: "escanteios",
-               own: j => j.own?.cantos ?? null,
-               tot: j => (j.own?.cantos != null && j.adv?.cantos != null) ? j.own.cantos + j.adv.cantos : null },
-    cartoes: { chip: "tCartoes", lbl: "cartões",
-               own: j => j.own?.amarelos != null ? (j.own.amarelos || 0) + (j.own.vermelhos || 0) : null,
-               tot: j => (j.own?.amarelos != null && j.adv?.amarelos != null)
-                    ? (j.own.amarelos || 0) + (j.own.vermelhos || 0) + (j.adv.amarelos || 0) + (j.adv.vermelhos || 0) : null },
-    gols:    { chip: "tGols",    lbl: "gols",
-               own: j => j.gols ?? null,
-               tot: j => (j.gols != null && j.golsSof != null) ? j.gols + j.golsSof : null },
-  };
+  const T_META = DJ_TMETA;
   for (const [fid, jg] of Object.entries(LINHAS.jogos || {})){
     const par = fxPorId[fid]; if (!par || !jg.time) continue;
     const [fi, fx] = par;
@@ -5889,7 +6007,7 @@ function renderDesajustes(){
         if (Math.abs(edge) > (CAP[meta.chip] || 4)) continue;
         const nome = sub === "total" ? `${fx.home} x ${fx.away}` : sub === "t1" ? fx.home : fx.away;
         porChave.set(`time:${fid}:${tipo}:${sub}`, {
-          fi, fx, tid: sub === "t2" ? fx.awayId : fx.homeId, nome,
+          fi, fx, tid: sub === "t2" ? fx.awayId : fx.homeId, nome, tipo, sub,
           stat: meta.chip, statLbl: `${meta.lbl}${sub === "total" ? " na partida" : ""}`,
           linha, media, edge, vals: vals.slice(0, janela),
           hit: vals.filter(v => v > linha).length, n: vals.length,
@@ -5903,15 +6021,14 @@ function renderDesajustes(){
   // negativos mais extremos
   rows.sort((a, b) => (b.edge) - (a.edge));
   const top = rows.slice(0, 40);
+  ULT_DJ_ROWS = top;
   const chipS = (k, lbl) => `<button class="chip ${statFiltro===k?'on':''}" onclick="state.djStat='${k}'; render()">${lbl}</button>`;
   const chipJ = n => `<button class="chip ${janela===n?'on':''}" onclick="state.djJanela=${n}; render()">Últimos ${n}</button>`;
   const linhaHTML = r => {
     const positivo = r.edge >= 0;
     const barras = [...r.vals].reverse().map((v, i, arr) =>
       `<span class="bx ${i === arr.length-1 ? "last" : ""} ${v > r.linha ? "hit" : ""}">${v}</span>`).join("");
-    const clique = r.ehTime
-      ? `go('jogo', null, null, null, ${r.fi})`
-      : `abrirDesajuste(${r.fi}, ${r.tid}, '${btoa(unescape(encodeURIComponent(r.nome)))}', '${r.stat}', ${r.linha})`;
+    const clique = `abrirDesajusteFoco(${top.indexOf(r)})`;
     const contexto = r.ehTime
       ? (r.nome.includes(" x ") ? r.fx.competicao : `${r.fx.home} x ${r.fx.away}`)
       : `${r.ehCasa ? r.fx.home : r.fx.away} · ${r.fx.home} x ${r.fx.away}`;
@@ -5939,7 +6056,7 @@ function renderDesajustes(){
 function render(){
   // telas de DETALHE escondem a barra de busca mobile — menos empilhamento no topo
   document.body.classList.toggle("tela-detalhe",
-    ["jogo", "jogador", "arbitro", "time"].includes(state.view));
+    ["jogo", "jogador", "arbitro", "time", "djfoco"].includes(state.view));
   if (state.view==="oportunidades") renderOportunidades();
   else if (state.view==="jogador") renderJogadorSimples();
   else if (state.view==="jogo") renderJogo();
@@ -5948,6 +6065,7 @@ function render(){
   else if (state.view==="time") renderTime();
   else if (state.view==="search") renderSearch();
   else if (state.view==="desajustes") renderDesajustes();
+  else if (state.view==="djfoco") renderDesajusteFoco();
   else renderRanking();
 }
 
