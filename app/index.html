@@ -5878,7 +5878,8 @@ function abrirCardDesajuste(modo){
   const f = state.djFoco; if (!f) return;
   const fx = FIXTURES[f.fi]; if (!fx) return;
   const linhaTxt = String(f.linha).replace(".", ",");
-  const label = `Mais de ${linhaTxt} ${f.statLbl}${f.ehTime ? "" : " · " + f.nome}`;
+  // partida ("cartões na partida") já tem o confronto no topo; TIME e JOGADOR sempre nomeados
+  const label = `Mais de ${linhaTxt} ${f.statLbl}${f.sub === "total" ? "" : " · " + f.nome}`;
   const contexto = `últimos jogos · quanto maior a distância da linha, maior o desajuste`;
   const destaque = { media: f.media, linha: f.linha, edge: f.edge };
   const CORES = ["#2AE86B", "#FE2C55"];
