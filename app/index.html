@@ -2976,7 +2976,11 @@ function renderOportunidades(){
 
   const conteudo = porDia.length ? porDia.map(d => {
     const total = d.comps.reduce((a, c) => a + c.jogos.length, 0);
-    const blocos = d.comps.map(c => `
+    // ligas FAVORITAS furam a fila (Pedro 08/08) — depois a ordem natural do dia
+    const favL = getFavLigas();
+    const compsOrd = [...d.comps].sort((a, b) =>
+      (favL.includes(b.ligaId) ? 1 : 0) - (favL.includes(a.ligaId) ? 1 : 0));
+    const blocos = compsOrd.map(c => `
       <div class="comp-block">
         <div class="comp-head"><span class="comp-name">${bandeiraDe(c.ligaId)} ${c.comp}</span><span class="comp-count">${c.jogos.length} jogo${c.jogos.length===1?"":"s"}</span></div>
         <div class="fx-list">${rowsDoComp(c.jogos)}</div>
