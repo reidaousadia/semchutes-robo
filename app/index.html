@@ -3153,7 +3153,8 @@ async function desenharGrafico(){
   const W = 1080, cx = W / 2;
   const chartH = 200, blocoH = 46 + chartH + 64;
   // no card de jogador o header tem linha extra (time · posição): desce o resto
-  const oHeader = 88, oSub = c.jog ? 200 : 166, oCtx = c.jog ? 238 : 206, g0 = c.jog ? 282 : 252;
+  const oHeader = 88, oSub = c.jog ? 200 : 166, oCtx = c.jog ? 238 : 206;
+  const g0 = (c.jog ? 282 : 252) + (c.destaque ? 118 : 0);
   const oFooter = g0 + c.series.length * blocoH + 4, panelH = oFooter + 44;
 
   const sticker = c.formato === "sticker";
@@ -3248,6 +3249,25 @@ async function desenharGrafico(){
   x.fillText(`${c.label.toUpperCase()} · JOGO A JOGO`, cx, Y(oSub));
   x.font = `500 22px ${MONO}`; x.fillStyle = "#9A9AA5";
   x.fillText(c.contexto, cx, Y(oCtx));
+
+  // faixa de DESTAQUE do desajuste: média · linha · distância (pedido do Pedro 08/08)
+  if (c.destaque){
+    const d = c.destaque;
+    const positivo = d.edge >= 0;
+    const corEdge = positivo ? "#2AE86B" : "#FE2C55";
+    const yCap = Y(oCtx + 44), yNum = Y(oCtx + 92);
+    const col = [cx - 300, cx, cx + 300];
+    const fmtBR = (v, dec) => v.toFixed(dec).replace(".", ",");
+    x.font = `700 20px ${MONO}`; x.fillStyle = "#6B6B76";
+    x.fillText("MÉDIA", col[0], yCap);
+    x.fillText("LINHA", col[1], yCap);
+    x.fillText(positivo ? "ACIMA DA LINHA" : "ABAIXO DA LINHA", col[2], yCap);
+    x.font = `800 54px ${UI}`; x.fillStyle = "#F5F5F7";
+    x.fillText(fmtBR(d.media, 1), col[0], yNum);
+    x.fillText(String(d.linha).replace(".", ","), col[1], yNum);
+    x.fillStyle = corEdge;
+    x.fillText(`${positivo ? "+" : "−"}${fmtBR(Math.abs(d.edge), 1)}`, col[2], yNum);
+  }
 
   // um bloco de gráfico por time
   c.series.forEach((s, idx) => {
@@ -5859,13 +5879,14 @@ function abrirCardDesajuste(modo){
   const fx = FIXTURES[f.fi]; if (!fx) return;
   const linhaTxt = String(f.linha).replace(".", ",");
   const label = `Mais de ${linhaTxt} ${f.statLbl}${f.ehTime ? "" : " · " + f.nome}`;
-  const contexto = `média ${fmt(f.media, 1).replace(".", ",")} · linha ${linhaTxt} · ${fmt(Math.abs(f.edge), 1).replace(".", ",")} ${f.edge >= 0 ? "acima" : "abaixo"} da linha`;
+  const contexto = `últimos jogos · quanto maior a distância da linha, maior o desajuste`;
+  const destaque = { media: f.media, linha: f.linha, edge: f.edge };
   const CORES = ["#2AE86B", "#FE2C55"];
   const jan = state.djFocoJan || 10;
   const corta = s => ({ ...s, pts: s.pts.filter(p => p.jogou !== false).slice(-jan) });
   if (modo === "grafico"){
     state.card = { tipo: "grafico", formato: "sticker", fx, label, dec: 1, sufixo: "",
-                   linha: f.linha, contexto,
+                   linha: f.linha, contexto, destaque,
                    series: f.serie.map(corta).map((s, i) => ({ nome: s.nome, cor: CORES[i] || CORES[0], pts: s.pts,
                      media: s.pts.reduce((a, p) => a + p.v, 0) / s.pts.length })) };
   } else {
