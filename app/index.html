@@ -666,7 +666,7 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
      negativo/não bateu = neutro apagado; rosa fica pra derrota/alerta explícito */
   .bx.hit { color: var(--pos); background: color-mix(in srgb, var(--pos) 12%, transparent); border-color: color-mix(in srgb, var(--pos) 30%, var(--border-soft)); }
   .bx.miss { color: var(--amber); background: color-mix(in srgb, var(--amber) 10%, transparent); border-color: color-mix(in srgb, var(--amber) 26%, var(--border-soft)); }
-  .bx.last { border-width: 2px; border-color: var(--text-dim); font-weight: 800; }
+  .bx.last { border-width: 2px; border-color: currentColor; font-weight: 800; }  /* recência na cor do estado */
   .b365 { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-top: 22px; }
   .b365-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
   .b365-t { font-weight: 800; font-size: 15px; }
@@ -6030,9 +6030,10 @@ function renderDesajustes(){
             ? jogaveis.reduce((a, b) => Math.abs(a[1] - 1.9) < Math.abs(b[1] - 1.9) ? a : b)[0]
             : escada[escada.length - 1][0];
         }
-        const hist = (getHistJogador(tid, nome, janela, "geral", fx.ligaId) || [])
+        // referência = 10 AMOSTRAS VÁLIDAS (busca 15 e completa com dado mais antigo se faltar)
+        const hist = (getHistJogador(tid, nome, 15, "geral", fx.ligaId) || [])
           .filter(g => (g.m || 0) > 0);   // não jogou → fora da média (Pedro 08/08)
-        const vals = hist.map(SEL[stat]).filter(v => v != null);
+        const vals = hist.map(SEL[stat]).filter(v => v != null).slice(0, janela);
         if (vals.length < 5) continue;
         const media = vals.reduce((a, b) => a + b, 0) / vals.length;
         const edge = media - linha;
@@ -6065,11 +6066,13 @@ function renderDesajustes(){
           : escada[escada.length - 1][0];
         let vals;
         if (sub === "total"){
-          vals = [...getJogosRx(fx.homeId, fx.ligaId, janela, "geral", null).map(meta.tot),
-                  ...getJogosRx(fx.awayId, fx.ligaId, janela, "geral", null).map(meta.tot)].filter(v => v != null);
+          const lado = tid2 => getJogosRx(tid2, fx.ligaId, 15, "geral", null)
+            .map(meta.tot).filter(v => v != null).slice(0, janela);
+          vals = [...lado(fx.homeId), ...lado(fx.awayId)];
         } else {
           const tid = sub === "t1" ? fx.homeId : fx.awayId;
-          vals = getJogosRx(tid, fx.ligaId, janela, "geral", null).map(meta.own).filter(v => v != null);
+          vals = getJogosRx(tid, fx.ligaId, 15, "geral", null)
+            .map(meta.own).filter(v => v != null).slice(0, janela);
         }
         if (vals.length < 5) continue;
         const media = vals.reduce((a, b) => a + b, 0) / vals.length;
