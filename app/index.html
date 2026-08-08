@@ -5853,7 +5853,7 @@ function abrirCardDesajuste(modo){
   const fx = FIXTURES[f.fi]; if (!fx) return;
   const linhaTxt = String(f.linha).replace(".", ",");
   const label = `Mais de ${linhaTxt} ${f.statLbl}${f.ehTime ? "" : " · " + f.nome}`;
-  const contexto = `últimos jogos · linha ${linhaTxt}`;
+  const contexto = `média ${fmt(f.media, 1).replace(".", ",")} · linha ${linhaTxt} · ${fmt(Math.abs(f.edge), 1).replace(".", ",")} ${f.edge >= 0 ? "acima" : "abaixo"} da linha`;
   const CORES = ["#2AE8E0", "#FE2C55"];
   if (modo === "grafico"){
     state.card = { tipo: "grafico", formato: "sticker", fx, label, dec: 1, sufixo: "",
@@ -5884,7 +5884,7 @@ function renderDesajusteFoco(){
     const hits = jogados.filter(p => p.hit).length;
     return `<div style="margin-top:16px">
       <div style="font-weight:800; font-size:13.5px; color:${s.cor}; margin-bottom:4px">${s.nome}
-        <span style="color:var(--muted); font-weight:600; font-size:12px"> · passou em ${hits} de ${jogados.length}</span></div>
+        <span style="color:var(--muted); font-weight:600; font-size:12px"> · passou em ${hits} de ${jogados.length} jogos com dado</span></div>
       <div style="position:relative">
         <div style="position:absolute; left:0; right:0; bottom:${rodape + f.linha/maxV*chartH}px; border-top:2px solid rgba(255,255,255,0.85); z-index:2; pointer-events:none"></div>
         <div class="tnum" style="position:absolute; left:2px; bottom:${rodape + f.linha/maxV*chartH + 4}px; font-size:11px; font-weight:800; color:var(--text); background:var(--bg); padding:0 5px; border-radius:4px; z-index:4">linha ${linhaTxt}</div>
@@ -5918,8 +5918,12 @@ function renderDesajusteFoco(){
           <div style="font-weight:800; font-size:17px">Mais de ${linhaTxt} ${f.statLbl}</div>
           <div style="color:var(--text-dim); font-size:13px; margin-top:3px">média ${fmt(f.media, 1)} · passou a linha em ${f.hit} de ${f.n} jogos</div>
         </div>
-        <div class="tnum" style="font-size:34px; font-weight:800; flex:none; color:${positivo ? "var(--acc)" : "var(--amber)"}">${positivo ? "+" : ""}${fmt(f.edge, 1)}</div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; flex:none">
+          <div class="tnum" style="font-size:34px; font-weight:800; color:${positivo ? "var(--acc)" : "var(--amber)"}">${positivo ? "+" : ""}${fmt(f.edge, 1)}</div>
+          <div style="font-size:10.5px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:${positivo ? "var(--acc)" : "var(--amber)"}; opacity:.85">${positivo ? "acima da linha" : "abaixo da linha"}</div>
+        </div>
       </div>
+      <div class="rx-sample" style="margin-top:10px; text-align:left">em português claro: a casa abriu a linha em <b>${linhaTxt}</b>, mas a média real é <b>${fmt(f.media, 1)}</b> — ou seja, o número vem ficando <b style="color:${positivo ? "var(--acc)" : "var(--amber)"}">${fmt(Math.abs(f.edge), 1)} ${positivo ? "ACIMA" : "ABAIXO"}</b> do que a linha sugere. Quanto maior essa distância, maior o desajuste.</div>
       ${f.serie.map(bloco).join("")}
       <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap">
         <button class="h2h-cardbtn" style="flex:1; min-width:180px; margin:0" onclick="abrirCardDesajuste('grafico')">${svgIco("grafico")} Gerar card · gráfico</button>
@@ -6052,7 +6056,10 @@ function renderDesajustes(){
         <span class="dj-time">${contexto}</span></div>
       <div class="dj-mid">
         <span class="dj-mercado">Mais de ${String(r.linha).replace(".", ",")} ${r.statLbl || STAT_LBL[r.stat]}</span>
-        <span class="dj-edge tnum" style="color:${positivo ? "var(--acc)" : "var(--amber)"}">${positivo ? "+" : ""}${fmt(r.edge, 1)}</span>
+        <span style="display:flex; flex-direction:column; align-items:flex-end; flex:none">
+          <span class="dj-edge tnum" style="color:${positivo ? "var(--acc)" : "var(--amber)"}">${positivo ? "+" : ""}${fmt(r.edge, 1)}</span>
+          <span style="font-size:10px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:${positivo ? "var(--acc)" : "var(--amber)"}; opacity:.8">${positivo ? "acima da linha" : "abaixo da linha"}</span>
+        </span>
       </div>
       <div class="dj-sub">média ${fmt(r.media, 1)} nos últimos ${r.n} · passou a linha em ${r.hit} de ${r.n}</div>
       <div class="dj-bxs">${barras}</div>
