@@ -5980,7 +5980,7 @@ function renderDesajusteFoco(){
   const faixa = [5, 10, 15].map(n => {
     const r = pctJan(n); if (!r) return "";
     return `<button class="chip ${jan === n ? "on" : ""}" onclick="setDjFocoJan(${n})" style="flex-direction:column; line-height:1.2">
-      <span style="font-size:11px; font-weight:700">L${n}</span>
+      <span style="font-size:11px; font-weight:700">${n} jogos${n === 10 ? " · base" : ""}</span>
       <span class="tnum" style="font-size:14px; font-weight:800; color:${jan === n ? "inherit" : (r.pct >= 70 ? "var(--pos)" : r.pct <= 40 ? "var(--amber)" : "var(--text-dim)")}">${r.pct}%</span>
     </button>`;
   }).join("");
@@ -6173,8 +6173,8 @@ function renderDesajustes(){
           <span style="font-size:10px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:${positivo ? "var(--pos)" : "var(--amber)"}; opacity:.8">${positivo ? "acima da linha" : "abaixo da linha"}</span>
         </span>
       </div>
-      <div class="dj-sub">média ${fmt(r.media, 1)} ${r.sub === "total" ? `em ${r.n} jogos dos dois times` : `nos últimos ${r.n} jogos com dado`} · passou a linha em ${r.hit} de ${r.n}</div>
-      <div class="dj-bxs">${barras}</div>
+      <div class="dj-sub">média ${fmt(r.media, 1)} ${r.sub === "total" ? `nos últimos 10 jogos de cada time` : `nos últimos ${r.n} jogos com dado`} · passou a linha em ${r.hit} de ${r.n}</div>
+      ${r.sub === "total" ? "" : `<div class="dj-bxs">${barras}</div>`}
     </button>`;
   };
   el.innerHTML = `
