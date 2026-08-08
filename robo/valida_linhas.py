@@ -15,14 +15,25 @@ d, _ = json.JSONDecoder().raw_decode(src[src.index("window.SC_LINHAS=") + len("w
 erros, avisos = [], []
 TIME_TIPOS = {"cantos", "cartoes", "gols"}
 
-def escada_ok(l, onde):
+def escada_ok(l, onde, lado="over"):
     if not isinstance(l, dict) or not l:
         erros.append(f"{onde}: escada vazia/ inválida"); return
+    pares = []
     for linha, odd in l.items():
-        try: float(linha)
+        try: lf = float(linha)
         except ValueError: erros.append(f"{onde}: linha não-numérica '{linha}'"); continue
         if not isinstance(odd, (int, float)) or odd <= 1.0:
-            erros.append(f"{onde}: odd inválida {odd} na linha {linha}")
+            erros.append(f"{onde}: odd inválida {odd} na linha {linha}"); continue
+        pares.append((lf, odd))
+    # MONOTONIA na ZONA DE DECISÃO (odds <= 3.0, onde a linha-base opera):
+    # over encarece conforme a linha sobe; under o contrário. Nas caudas (odds
+    # altas) a fusão melhor-odd entre casas quebra monotonia legitimamente.
+    pares = sorted(p for p in pares if p[1] <= 3.0)
+    for (l1, o1), (l2, o2) in zip(pares, pares[1:]):
+        if lado == "over" and o2 < o1 * 0.85:
+            erros.append(f"{onde}: monotonia quebrada (over {l1}@{o1} vs {l2}@{o2})")
+        if lado == "under" and o2 > o1 * 1.18:
+            erros.append(f"{onde}: monotonia quebrada (under {l1}@{o1} vs {l2}@{o2})")
 
 jogos = d.get("jogos") or {}
 if not jogos:
@@ -51,7 +62,7 @@ for fid, jg in jogos.items():
                 if sub not in ("total", "t1", "t2"):
                     erros.append(f"{chave}.{tipo}.{sub} ({fid}): sub desconhecido")
                 tot_time += 1
-                escada_ok(ladder, f"{chave}.{tipo}.{sub} ({fid})")
+                escada_ok(ladder, f"{chave}.{tipo}.{sub} ({fid})", "under" if chave == "timeU" else "over")
 
 if tot_jog == 0: avisos.append("nenhum prop de jogador coletado nesta rodada")
 if jogaveis_jog == 0 and tot_jog > 0: erros.append("NENHUMA escada de jogador com odd >= 1,50")

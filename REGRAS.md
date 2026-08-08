@@ -26,3 +26,8 @@
 9. **Nenhum número sobrepõe outro número** (design).
 10. **Relato**: toda explicação sobre um jogo/linha específica exige conferência
     do fixture ID no dado bruto antes de afirmar qualquer coisa.
+11. **Melhor odd multi-casas é o critério**: as escadas fundem TODAS as casas
+    coletadas ficando com a melhor odd por linha; a jogabilidade (≥ 1,50) é
+    julgada pela melhor odd. Nome de casa NUNCA aparece no app (política Apple).
+12. **Quarentena**: escada com monotonia quebrada na zona de decisão (odds ≤ 3,0)
+    é podada pelo coletor; o validador é o portão final — violou, não publica.

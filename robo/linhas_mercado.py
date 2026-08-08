@@ -66,6 +66,32 @@ def main():
     sem, _ = json.JSONDecoder().raw_decode(src[i + len("window.SC_SEMANA="):].lstrip())
     fixtures = sem.get("fixtures", [])
 
+    # catálogo de mercados (público, cacheado) — dá o nome e a LINHA (handicap) de cada marketId
+    mk_cache = os.path.join(SCRATCH, "oddspapi_markets.json")
+    if not os.path.exists(mk_cache):
+        cat = curl("https://oddspapi.io/api/us/markets?sportId=10")
+        json.dump(cat if isinstance(cat, list) else (cat.get("data") or []), open(mk_cache, "w"))
+    _cat = json.load(open(mk_cache))
+    if isinstance(_cat, dict): _cat = _cat.get("data") or []
+    MK = {str(m.get("marketId")): m for m in _cat if isinstance(m, dict)}
+    OC_NOME = {}
+    for m in _cat:
+        if isinstance(m, dict):
+            for o in m.get("outcomes") or []:
+                OC_NOME[str(o.get("outcomeId"))] = o.get("outcomeName")
+    # mercados de TIME nas casas pagas (nome do catálogo → tipo/sub Apitou)
+    M_TIME_OP = {
+        "Corners - Over Under Full Time": ("cantos", "total"),
+        "Corners - Over Under Team 1": ("cantos", "t1"),
+        "Corners - Over Under Team 2": ("cantos", "t2"),
+        "Bookings - Over Under Full Time": ("cartoes", "total"),
+        "Bookings - Over Under Team 1": ("cartoes", "t1"),
+        "Bookings - Over Under Team 2": ("cartoes", "t2"),
+        "Over Under Full Time": ("gols", "total"),
+        "Over Under Team 1": ("gols", "t1"),
+        "Over Under Team 2": ("gols", "t2"),
+    }
+
     # participants OddsPapi (id→nome) — cacheado em disco, muda pouco (1 req quando falta)
     part_cache = os.path.join(SCRATCH, "oddspapi_participants.json")
     if os.path.exists(part_cache):
@@ -121,13 +147,32 @@ def main():
                     for p in (oc.get("players") or {}).values():
                         nome, preco = p.get("playerName"), p.get("price")
                         if not nome or preco is None or not p.get("active", True): continue
-                        reg = jog["jogador"].setdefault(nome, {}).setdefault(stat, {"p": None, "c": apelido, "l": {}})
-                        # betano é a referência; bet365 só preenche quem faltou
-                        if reg["c"] != apelido and reg["l"]: continue
-                        reg["c"] = apelido
-                        reg["l"][str(linha)] = preco
-                        if p.get("mainLine"): reg["p"] = linha
+                        reg = jog["jogador"].setdefault(nome, {}).setdefault(stat, {"p": None, "c": "mercado", "l": {}})
+                        # MELHOR odd por linha entre todas as casas (critério do Pedro)
+                        k = str(linha)
+                        if reg["l"].get(k) is None or preco > reg["l"][k]:
+                            reg["l"][k] = preco
+                        if p.get("mainLine") and reg["p"] is None: reg["p"] = linha
                         achou = True
+            # mercados de TIME desta casa (linha no handicap do catálogo; Over/Under nomeados)
+            for mid, mm in (corpo.get("markets") or {}).items():
+                meta = MK.get(str(mid)) or {}
+                alvo = M_TIME_OP.get(meta.get("marketName"))
+                if not alvo: continue
+                linha_t = meta.get("handicap")
+                if not isinstance(linha_t, (int, float)) or linha_t <= 0: continue
+                if float(linha_t) % 1 == 0: continue   # linhas inteiras = asiáticas/push, semântica incerta
+                for oid, oc in (mm.get("outcomes") or {}).items():
+                    lado = OC_NOME.get(str(oid))
+                    if lado not in ("Over", "Under"): continue
+                    preco = ((oc.get("players") or {}).get("0") or {}).get("price")
+                    if not isinstance(preco, (int, float)): continue
+                    destino = jog.setdefault("time" if lado == "Over" else "timeU", {})
+                    reg_t = destino.setdefault(alvo[0], {}).setdefault(alvo[1], {})
+                    k = str(float(linha_t))
+                    if reg_t.get(k) is None or preco > reg_t[k]:
+                        reg_t[k] = preco
+                    achou = True
             casados += 1 if achou else 0
         print(f"{slug}: {casados} jogos com props casados", flush=True)
 
@@ -145,8 +190,14 @@ def main():
             alt = json.load(open(alt_path, encoding="utf-8"))
             for fid, aj in (alt.get("jogos") or {}).items():
                 alvo = jogos.setdefault(fid, {"kickoff": aj.get("kickoff"), "jogador": {}, "time": {}})
-                if aj.get("time"): alvo["time"] = aj["time"]
-                if aj.get("timeU"): alvo["timeU"] = aj["timeU"]
+                for chave in ("time", "timeU"):
+                    for tipo, subs in (aj.get(chave) or {}).items():
+                        for sub, ladder in (subs or {}).items():
+                            reg_t = alvo.setdefault(chave, {}).setdefault(tipo, {}).setdefault(sub, {})
+                            for k, preco in (ladder or {}).items():
+                                kk = str(float(k))
+                                if reg_t.get(kk) is None or preco > reg_t[kk]:
+                                    reg_t[kk] = preco
                 # props Altenar só preenchem jogador que as casas pagas não trouxeram
                 for nome, stats in (aj.get("jogador") or {}).items():
                     for stat, reg in stats.items():
@@ -155,6 +206,30 @@ def main():
                              "l": {k: v for k, v in (reg.get("linhas") or {}).items()}})
         except Exception as e:
             print("merge altenar falhou:", e, flush=True)
+
+    # QUARENTENA: escada com monotonia quebrada na zona de decisão (odds <= 3.0)
+    # é mercado mal mapeado na fonte — poda a escada, não trava a publicação
+    def zona_ok(l, lado="over"):
+        pares = sorted((float(k), v) for k, v in (l or {}).items()
+                       if isinstance(v, (int, float)) and v <= 3.0)
+        for (l1, o1), (l2, o2) in zip(pares, pares[1:]):
+            if lado == "over" and o2 < o1 * 0.85: return False
+            if lado == "under" and o2 > o1 * 1.18: return False
+        return True
+    podados = 0
+    for j in jogos.values():
+        for nome in list(j.get("jogador") or {}):
+            for stat in list(j["jogador"][nome]):
+                if not zona_ok(j["jogador"][nome][stat].get("l")):
+                    del j["jogador"][nome][stat]; podados += 1
+            if not j["jogador"][nome]: del j["jogador"][nome]
+        for chave, lado in (("time", "over"), ("timeU", "under")):
+            for tipo in list(j.get(chave) or {}):
+                for sub in list(j[chave][tipo]):
+                    if not zona_ok(j[chave][tipo][sub], lado):
+                        del j[chave][tipo][sub]; podados += 1
+                if not j[chave][tipo]: del j[chave][tipo]
+    if podados: print(f"quarentena: {podados} escadas podadas por monotonia", flush=True)
 
     payload = {"geradoEm": datetime.now(BRT).isoformat(), "jogos": jogos}
     destino = os.path.join(RAIZ, "app", "linhas.js")
