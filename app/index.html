@@ -1789,9 +1789,9 @@ async function desenharTendencia(){
     const bs = 40, bg2 = 8, totalW = t.pts.length * bs + (t.pts.length - 1) * bg2;
     let bx = colCx - totalW / 2;
     t.pts.forEach(p => {
-      x.fillStyle = p.hit ? (cor === "#2AE8E0" ? "rgba(42,232,224,0.18)" : "rgba(254,44,85,0.18)") : "rgba(255,255,255,0.06)";
+      x.fillStyle = p.hit ? "rgba(42,232,224,0.18)" : "rgba(254,44,85,0.14)";
       x.beginPath(); x.roundRect(bx, Y(oBoxes) - bs/2, bs, bs, 9); x.fill();
-      x.font = `800 20px ${MONO}`; x.fillStyle = p.hit ? cor : "#6B6B76";
+      x.font = `800 20px ${MONO}`; x.fillStyle = p.hit ? "#2AE8E0" : "#FE2C55";
       x.fillText(String(p.v), bx + bs/2, Y(oBoxes) + 1);
       bx += bs + bg2;
     });
@@ -3266,12 +3266,16 @@ async function desenharGrafico(){
     s.pts.forEach((p, i) => {
       const bx = ax0 + slot * i + slot / 2;
       const apagada = p.hit !== undefined ? !p.hit : !p.v; // tendência: colore só quem bateu a linha
+      // identidade apostador: com linha de mercado, quem NÃO bateu é ROSA (não cinza)
+      const temLinha = c.linha != null && p.hit !== undefined;
+      const corMiss = temLinha ? "rgba(254,44,85,0.45)" : "rgba(255,255,255,0.10)";
+      const corMissTxt = temLinha ? "#FE2C55" : "#6B6B76";
       const bh = Math.max(8, (p.v / max) * (bottom - top - 26));
       const by = bottom - bh;
-      x.fillStyle = apagada ? "rgba(255,255,255,0.10)" : s.cor;
+      x.fillStyle = apagada ? corMiss : s.cor;
       x.beginPath(); x.roundRect(bx - barW/2, by, barW, bh, 6); x.fill();
       x.textAlign = "center"; x.font = `800 24px ${UI}`;
-      x.fillStyle = apagada ? "#6B6B76" : s.cor;
+      x.fillStyle = apagada ? corMissTxt : s.cor;
       x.fillText(String(Number.isInteger(p.v) ? p.v : fmt(p.v, c.dec)) + (c.sufixo || ""), bx, by - 17);
       let adv = p.adv;
       x.font = `500 16px ${MONO}`;
@@ -4561,7 +4565,7 @@ function renderJogadorSimples(){
         <div class="tnum" style="position:absolute; right:2px; bottom:${rodapeH + mediaC/maxC*chartH + 4}px; font-size:10.5px; color:var(--txt3); z-index:2; pointer-events:none">média ${metaSel[2] ? fmt(mediaC) : Math.round(mediaC)}</div>
         ${linhaMk != null ? `
         <div style="position:absolute; left:0; right:0; bottom:${rodapeH + linhaMk/maxC*chartH}px; border-top:2px solid rgba(255,255,255,0.85); z-index:3; pointer-events:none"></div>
-        <div class="tnum" style="position:absolute; left:2px; bottom:${rodapeH + linhaMk/maxC*chartH + 4}px; font-size:11px; font-weight:800; color:var(--text); z-index:3; pointer-events:none">linha ${String(linhaMk).replace(".", ",")}</div>` : ""}
+        <div class="tnum" style="position:absolute; left:2px; bottom:${rodapeH + linhaMk/maxC*chartH + 4}px; font-size:11px; font-weight:800; color:var(--text); background:var(--bg); padding:0 5px; border-radius:4px; z-index:4; pointer-events:none">linha ${String(linhaMk).replace(".", ",")}</div>` : ""}
         <div style="display:flex; align-items:flex-end; gap:6px; height:${chartH + rodapeH + 22}px">
           ${vsChart.map(g => {
             const v = g[statSel];
@@ -4573,7 +4577,7 @@ function renderJogadorSimples(){
                           : (v == null || v === 0 ? "rgba(255,255,255,0.10)" : passou ? "var(--acc)" : "var(--amber)");
             const h = v == null ? 4 : Math.max(6, v/maxC*chartH);
             return `<div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%">
-              <div class="tnum" style="font-size:12px; font-weight:800; color:${corTxt}; margin-bottom:3px">${v == null ? "–" : v}</div>
+              <div class="tnum" style="font-size:12px; font-weight:800; color:${corTxt}; margin-bottom:3px; background:var(--bg); padding:0 4px; border-radius:4px; position:relative; z-index:3">${v == null ? "–" : v}</div>
               <div style="width:100%; max-width:46px; height:${h}px; border-radius:5px 5px 0 0; background:${corBar}"></div>
               <div style="height:${rodapeH}px; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:5px; width:100%">
                 <span style="font-size:9.5px; color:var(--txt3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%">${g.a}</span>
@@ -5831,10 +5835,12 @@ function abrirDesajusteFoco(i){
   } else {
     const hist = getHistJogador(r.tid, r.nome, janela, "geral", fx.ligaId) || [];
     const sel = DJ_SEL[r.stat];
-    const pts = [...hist].reverse()
-      .map(g => ({ v: sel(g), hit: sel(g) != null && sel(g) > r.linha, adv: g.a || "", ts: g.t || "" }))
-      .filter(p => p.v != null);
-    if (pts.length) serie.push({ nome: r.nome, cor: "var(--acc)", pts });
+    const pts = [...hist].reverse().map(g => {
+      const jogou = (g.m || 0) > 0;
+      const v = jogou ? sel(g) : null;
+      return { v, jogou, hit: jogou && v != null && v > r.linha, adv: g.a || "", ts: g.t || "" };
+    }).filter(p => !p.jogou || p.v != null);
+    if (pts.some(p => p.jogou)) serie.push({ nome: r.nome, cor: "var(--acc)", pts });
   }
   if (!serie.length) return;
   state.djFoco = { fi: r.fi, nome: r.nome, ehTime: !!r.ehTime, stat: r.stat, tid: r.tid,
@@ -5872,20 +5878,28 @@ function renderDesajusteFoco(){
   const linhaTxt = String(f.linha).replace(".", ",");
   const positivo = f.edge >= 0;
   const bloco = s => {
-    const maxV = Math.max(...s.pts.map(p => p.v), f.linha, 0.001);
+    const jogados = s.pts.filter(p => p.jogou !== false);
+    const maxV = Math.max(...jogados.map(p => p.v), f.linha, 0.001);
     const chartH = 130, rodape = 34;
-    const hits = s.pts.filter(p => p.hit).length;
+    const hits = jogados.filter(p => p.hit).length;
     return `<div style="margin-top:16px">
       <div style="font-weight:800; font-size:13.5px; color:${s.cor}; margin-bottom:4px">${s.nome}
-        <span style="color:var(--muted); font-weight:600; font-size:12px"> · passou em ${hits} de ${s.pts.length}</span></div>
+        <span style="color:var(--muted); font-weight:600; font-size:12px"> · passou em ${hits} de ${jogados.length}</span></div>
       <div style="position:relative">
         <div style="position:absolute; left:0; right:0; bottom:${rodape + f.linha/maxV*chartH}px; border-top:2px solid rgba(255,255,255,0.85); z-index:2; pointer-events:none"></div>
-        <div class="tnum" style="position:absolute; left:2px; bottom:${rodape + f.linha/maxV*chartH + 4}px; font-size:11px; font-weight:800; color:var(--text); z-index:2">linha ${linhaTxt}</div>
+        <div class="tnum" style="position:absolute; left:2px; bottom:${rodape + f.linha/maxV*chartH + 4}px; font-size:11px; font-weight:800; color:var(--text); background:var(--bg); padding:0 5px; border-radius:4px; z-index:4">linha ${linhaTxt}</div>
         <div style="display:flex; align-items:flex-end; gap:5px; height:${chartH + rodape + 20}px">
           ${s.pts.map(p => {
+            if (p.jogou === false) return `<div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%">
+              <div style="font-size:13px; font-weight:800; color:var(--muted); position:relative; z-index:3">×</div>
+              <div style="width:100%; max-width:42px; height:4px; border-radius:4px; background:rgba(255,255,255,0.08); margin-top:2px"></div>
+              <div style="height:${rodape}px; display:flex; flex-direction:column; align-items:center; padding-top:4px; width:100%">
+                <span style="font-size:9px; color:var(--txt3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%">${p.adv}</span>
+                <span class="tnum" style="font-size:9px; color:var(--txt3)">${p.ts.slice(5).split("-").reverse().join("/")}</span>
+              </div></div>`;
             const h = Math.max(6, p.v/maxV*chartH);
             return `<div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%">
-              <div class="tnum" style="font-size:11.5px; font-weight:800; color:${p.hit ? "var(--acc)" : "var(--amber)"}">${p.v}</div>
+              <div class="tnum" style="font-size:11.5px; font-weight:800; color:${p.hit ? "var(--acc)" : "var(--amber)"}; background:var(--bg); padding:0 4px; border-radius:4px; position:relative; z-index:3">${p.v}</div>
               <div style="width:100%; max-width:42px; height:${h}px; border-radius:4px 4px 0 0; background:${p.hit ? "var(--acc)" : "color-mix(in srgb, var(--amber) 55%, transparent)"}; margin-top:2px"></div>
               <div style="height:${rodape}px; display:flex; flex-direction:column; align-items:center; padding-top:4px; width:100%">
                 <span style="font-size:9px; color:var(--txt3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%">${p.adv}</span>
@@ -5961,7 +5975,8 @@ function renderDesajustes(){
             ? jogaveis.reduce((a, b) => Math.abs(a[1] - 1.9) < Math.abs(b[1] - 1.9) ? a : b)[0]
             : escada[escada.length - 1][0];
         }
-        const hist = getHistJogador(tid, nome, janela, "geral", fx.ligaId) || [];
+        const hist = (getHistJogador(tid, nome, janela, "geral", fx.ligaId) || [])
+          .filter(g => (g.m || 0) > 0);   // não jogou → fora da média (Pedro 08/08)
         const vals = hist.map(SEL[stat]).filter(v => v != null);
         if (vals.length < 5) continue;
         const media = vals.reduce((a, b) => a + b, 0) / vals.length;
