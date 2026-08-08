@@ -650,7 +650,7 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
     font-family: var(--f-mono); font-size: 12.5px; font-weight: 700; color: var(--muted);
     position: relative; cursor: default; }
   /* tooltip: contra quem foi aquele jogo */
-  .bx[data-tip]:hover::after, .spark i[data-tip]:hover::after, .spark i.tipon[data-tip]::after,
+  .bx[data-tip]:hover::after, .bx.tipon[data-tip]::after, .spark i[data-tip]:hover::after, .spark i.tipon[data-tip]::after,
   .mchip[data-tip]:hover::after, .mchip.tipon[data-tip]::after {
     content: attr(data-tip);
     position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
@@ -659,7 +659,7 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
     padding: 5px 9px; border-radius: 7px; box-shadow: 0 4px 14px rgba(0,0,0,.45);
     z-index: 50; pointer-events: none;
   }
-  .bx[data-tip]:hover::before, .spark i[data-tip]:hover::before, .spark i.tipon[data-tip]::before,
+  .bx[data-tip]:hover::before, .bx.tipon[data-tip]::before, .spark i[data-tip]:hover::before, .spark i.tipon[data-tip]::before,
   .mchip[data-tip]:hover::before, .mchip.tipon[data-tip]::before {
     content: ""; position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%) rotate(45deg);
     width: 9px; height: 9px; background: var(--surface); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
@@ -4955,8 +4955,8 @@ function setRxChart(k){ state.rxChart = state.rxChart === k ? null : k; render()
    SEM disparar o card da linha; tocar no resto da linha gera o card normalmente.
    Listener em fase de captura pra interceptar antes do onclick da linha. */
 document.addEventListener("click", e => {
-  const bar = e.target.closest(".spark i, .mchip");
-  document.querySelectorAll(".spark i.tipon, .mchip.tipon").forEach(el => { if (el !== bar) el.classList.remove("tipon"); });
+  const bar = e.target.closest(".spark i, .mchip, .bx[data-tip]");
+  document.querySelectorAll(".spark i.tipon, .mchip.tipon, .bx.tipon").forEach(el => { if (el !== bar) el.classList.remove("tipon"); });
   if (bar){
     e.stopPropagation(); e.preventDefault();
     bar.classList.toggle("tipon");
@@ -6184,7 +6184,9 @@ function renderDesajustes(){
         // referência = 10 AMOSTRAS VÁLIDAS (busca 15 e completa com dado mais antigo se faltar)
         const hist = (getHistJogador(tid, nome, 15, "geral", fx.ligaId) || [])
           .filter(g => (g.m || 0) > 0);   // não jogou → fora da média (Pedro 08/08)
-        const vals = hist.map(SEL[stat]).filter(v => v != null).slice(0, janela);
+        const amostra = hist.map(g => ({ v: SEL[stat](g), a: g.a || "", t: g.t || "" }))
+          .filter(p => p.v != null).slice(0, janela);
+        const vals = amostra.map(p => p.v);
         if (vals.length < 5) continue;
         const media = vals.reduce((a, b) => a + b, 0) / vals.length;
         const edgeOver = media - linha;
@@ -6203,7 +6205,7 @@ function renderDesajustes(){
         const chave = `${tid}:${nome}:${stat}`;
         const atual = porChave.get(chave);
         if (atual && (PRIO[atual.casa] ?? 9) <= (PRIO[reg.c] ?? 9)) continue;
-        porChave.set(chave, { fi, fx, tid, nome, stat, linha, media, edge, vals, dir: rdir,
+        porChave.set(chave, { fi, fx, tid, nome, stat, linha, media, edge, vals, amostra, dir: rdir,
                               hit: vals.filter(v => rdir === "over" ? v > linha : v < linha).length,
                               n: vals.length, ehCasa: tid === fx.homeId, casa: reg.c });
       }
@@ -6227,16 +6229,17 @@ function renderDesajustes(){
           ? jogaveis.reduce((a, b) => Math.abs(a[1] - 1.9) < Math.abs(b[1] - 1.9) ? a : b)[0]
           : escada[escada.length - 1][0];
         let vals;
-        let valsH = null, valsA = null;
+        let valsH = null, valsA = null, amostra = null, amH = null, amA = null;
+        const amostraDe = (tid2, getter) => getJogosRx(tid2, fx.ligaId, 15, "geral", null)
+          .map(j => ({ v: getter(j), a: j.advNome || "", t: j.ts || "" }))
+          .filter(p => p.v != null).slice(0, janela);
         if (sub === "total"){
-          const lado = tid2 => getJogosRx(tid2, fx.ligaId, 15, "geral", null)
-            .map(meta.tot).filter(v => v != null).slice(0, janela);
-          valsH = lado(fx.homeId); valsA = lado(fx.awayId);
+          amH = amostraDe(fx.homeId, meta.tot); amA = amostraDe(fx.awayId, meta.tot);
+          valsH = amH.map(p => p.v); valsA = amA.map(p => p.v);
           vals = [...valsH, ...valsA];
         } else {
-          const tid = sub === "t1" ? fx.homeId : fx.awayId;
-          vals = getJogosRx(tid, fx.ligaId, 15, "geral", null)
-            .map(meta.own).filter(v => v != null).slice(0, janela);
+          amostra = amostraDe(sub === "t1" ? fx.homeId : fx.awayId, meta.own);
+          vals = amostra.map(p => p.v);
         }
         if (vals.length < 5) continue;
         const media = vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -6253,7 +6256,7 @@ function renderDesajustes(){
         porChave.set(`time:${fid}:${tipo}:${sub}`, {
           fi, fx, tid: sub === "t2" ? fx.awayId : fx.homeId, nome, tipo, sub, dir: rdir,
           stat: meta.chip, statLbl: `${meta.lbl}${sub === "total" ? " na partida" : ""}`,
-          linha, media, edge, vals: vals.slice(0, janela), valsH, valsA,
+          linha, media, edge, vals: vals.slice(0, janela), valsH, valsA, amostra, amH, amA,
           hit: vals.filter(v => rdir === "over" ? v > linha : v < linha).length, n: vals.length,
           ehCasa: sub !== "t2", ehTime: true });
       }
@@ -6271,8 +6274,12 @@ function renderDesajustes(){
   const linhaHTML = r => {
     const positivo = r.edge >= 0;
     const bate = v => r.dir === "under" ? v < r.linha : v > r.linha;
-    const barras = [...r.vals].reverse().map((v, i, arr) =>
-      `<span class="bx ${i === arr.length-1 ? "last" : ""} ${bate(v) ? "hit" : "miss"}">${v}</span>`).join("");
+    const dataBR = t => t ? t.slice(5).split("-").reverse().join("/") : "";
+    const caixas = am => [...(am || [])].reverse().map((p, i, arr) =>
+      `<span class="bx ${i === arr.length-1 ? "last" : ""} ${bate(p.v) ? "hit" : "miss"}" data-tip="× ${p.a} · ${dataBR(p.t)}">${p.v}</span>`).join("");
+    const barras = r.amostra ? caixas(r.amostra)
+      : [...r.vals].reverse().map((v, i, arr) =>
+        `<span class="bx ${i === arr.length-1 ? "last" : ""} ${bate(v) ? "hit" : "miss"}">${v}</span>`).join("");
     const clique = `abrirDesajusteFoco(${top.indexOf(r)})`;
     const contexto = (r.ehTime
       ? (r.nome.includes(" x ") ? r.fx.competicao : `${r.fx.home} x ${r.fx.away}`)
@@ -6294,11 +6301,8 @@ function renderDesajustes(){
           const ws = n.replace(/[^A-Za-zÀ-ú ]/g, "").split(" ").filter(Boolean);
           return (ws.length >= 2 ? ws.map(w => w[0]).join("").slice(0, 3) : (ws[0] || n).slice(0, 3)).toUpperCase();
         };
-        const bateT = v => r.dir === "under" ? v < r.linha : v > r.linha;
-        const fileira = vs => [...(vs || [])].reverse().map((v, i, arr) =>
-          `<span class="bx ${i === arr.length-1 ? "last" : ""} ${bateT(v) ? "hit" : "miss"}">${v}</span>`).join("");
-        return `<div class="dj-bxs"><span class="dj-bxlbl">${abrev(r.fx.home)}</span>${fileira(r.valsH)}</div>
-                <div class="dj-bxs"><span class="dj-bxlbl">${abrev(r.fx.away)}</span>${fileira(r.valsA)}</div>`;
+        return `<div class="dj-bxs"><span class="dj-bxlbl">${abrev(r.fx.home)}</span>${caixas(r.amH || (r.valsH || []).map(v => ({ v, a: "", t: "" })))}</div>
+                <div class="dj-bxs"><span class="dj-bxlbl">${abrev(r.fx.away)}</span>${caixas(r.amA || (r.valsA || []).map(v => ({ v, a: "", t: "" })))}</div>`;
       })() : `<div class="dj-bxs">${barras}</div>`}
     </button>`;
   };
