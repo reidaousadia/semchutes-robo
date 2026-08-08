@@ -23,6 +23,8 @@ jobs:
           echo "ODDSPAPI_KEY=$ODDSPAPI_KEY" > .env
           python3 robo/linhas_altenar.py
           python3 robo/linhas_mercado.py
+      - name: valida contra as REGRAS do produto (falhou = não publica)
+        run: python3 robo/valida_linhas.py
       - name: publica linhas.js no site (deploy só do arquivo, preservando o resto)
         env:
           NETLIFY_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
