@@ -661,6 +661,7 @@ if ("serviceWorker" in navigator && location.protocol === "https:")
   /* semântica de apostador (Pedro 08/08): POSITIVO/bateu = ciano (nosso "verde"),
      negativo/não bateu = neutro apagado; rosa fica pra derrota/alerta explícito */
   .bx.hit { color: var(--acc); background: color-mix(in srgb, var(--acc) 12%, transparent); border-color: color-mix(in srgb, var(--acc) 30%, var(--border-soft)); }
+  .bx.miss { color: var(--amber); background: color-mix(in srgb, var(--amber) 10%, transparent); border-color: color-mix(in srgb, var(--amber) 26%, var(--border-soft)); }
   .bx.last { border-width: 2px; border-color: var(--text-dim); font-weight: 800; }
   .b365 { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-top: 22px; }
   .b365-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -4565,8 +4566,8 @@ function renderJogadorSimples(){
         <div class="tnum" style="position:absolute; right:2px; bottom:${rodapeH + mediaC/maxC*chartH + 4}px; font-size:10.5px; color:var(--txt3); z-index:2; pointer-events:none">média ${metaSel[2] ? fmt(mediaC) : Math.round(mediaC)}</div>
         ${linhaMk != null ? `
         <div style="position:absolute; left:0; right:0; bottom:${rodapeH + linhaMk/maxC*chartH}px; border-top:2px solid rgba(255,255,255,0.85); z-index:3; pointer-events:none"></div>
-        <div class="tnum" style="position:absolute; left:2px; bottom:${rodapeH + linhaMk/maxC*chartH + 4}px; font-size:11px; font-weight:800; color:var(--text); background:var(--bg); padding:0 5px; border-radius:4px; z-index:4; pointer-events:none">linha ${String(linhaMk).replace(".", ",")}</div>` : ""}
-        <div style="display:flex; align-items:flex-end; gap:6px; height:${chartH + rodapeH + 22}px">
+        <div class="tnum" style="position:absolute; left:0; bottom:${rodapeH + linhaMk/maxC*chartH + 4}px; font-size:11px; font-weight:800; color:var(--text); z-index:4; pointer-events:none">linha<br>${String(linhaMk).replace(".", ",")}</div>` : ""}
+        <div style="display:flex; align-items:flex-end; gap:6px; height:${chartH + rodapeH + 22}px${linhaMk != null ? "; margin-left:46px" : ""}">
           ${vsChart.map(g => {
             const v = g[statSel];
             const zero = !v;
@@ -5843,7 +5844,7 @@ function abrirDesajusteFoco(i){
     if (pts.some(p => p.jogou)) serie.push({ nome: r.nome, cor: "var(--acc)", pts });
   }
   if (!serie.length) return;
-  state.djFoco = { fi: r.fi, nome: r.nome, ehTime: !!r.ehTime, stat: r.stat, tid: r.tid,
+  state.djFoco = { fi: r.fi, nome: r.nome, ehTime: !!r.ehTime, stat: r.stat, tid: r.tid, sub: r.sub,
                    statLbl: r.statLbl || DJ_STAT_LBL[r.stat], linha: r.linha,
                    media: r.media, edge: r.edge, hit: r.hit, n: r.n, serie };
   go('djfoco');
@@ -5887,8 +5888,8 @@ function renderDesajusteFoco(){
         <span style="color:var(--muted); font-weight:600; font-size:12px"> · passou em ${hits} de ${jogados.length} jogos com dado</span></div>
       <div style="position:relative">
         <div style="position:absolute; left:0; right:0; bottom:${rodape + f.linha/maxV*chartH}px; border-top:2px solid rgba(255,255,255,0.85); z-index:2; pointer-events:none"></div>
-        <div class="tnum" style="position:absolute; left:2px; bottom:${rodape + f.linha/maxV*chartH + 4}px; font-size:11px; font-weight:800; color:var(--text); background:var(--bg); padding:0 5px; border-radius:4px; z-index:4">linha ${linhaTxt}</div>
-        <div style="display:flex; align-items:flex-end; gap:5px; height:${chartH + rodape + 20}px">
+        <div class="tnum" style="position:absolute; left:0; bottom:${rodape + f.linha/maxV*chartH + 4}px; font-size:11px; font-weight:800; color:var(--text); z-index:4">linha<br>${linhaTxt}</div>
+        <div style="display:flex; align-items:flex-end; gap:5px; height:${chartH + rodape + 20}px; margin-left:46px">
           ${s.pts.map(p => {
             if (p.jogou === false) return `<div style="flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%">
               <div style="font-size:13px; font-weight:800; color:var(--muted); position:relative; z-index:3">×</div>
@@ -5916,7 +5917,7 @@ function renderDesajusteFoco(){
       <div style="display:flex; justify-content:space-between; align-items:center; gap:12px">
         <div>
           <div style="font-weight:800; font-size:17px">Mais de ${linhaTxt} ${f.statLbl}</div>
-          <div style="color:var(--text-dim); font-size:13px; margin-top:3px">média ${fmt(f.media, 1)} · passou a linha em ${f.hit} de ${f.n} jogos</div>
+          <div style="color:var(--text-dim); font-size:13px; margin-top:3px">média ${fmt(f.media, 1)} · passou a linha em ${f.hit} de ${f.n} jogos${f.sub === "total" ? " (dois times somados)" : " com dado"}</div>
         </div>
         <div style="display:flex; flex-direction:column; align-items:flex-end; flex:none">
           <div class="tnum" style="font-size:34px; font-weight:800; color:${positivo ? "var(--acc)" : "var(--amber)"}">${positivo ? "+" : ""}${fmt(f.edge, 1)}</div>
@@ -6046,7 +6047,7 @@ function renderDesajustes(){
   const linhaHTML = r => {
     const positivo = r.edge >= 0;
     const barras = [...r.vals].reverse().map((v, i, arr) =>
-      `<span class="bx ${i === arr.length-1 ? "last" : ""} ${v > r.linha ? "hit" : ""}">${v}</span>`).join("");
+      `<span class="bx ${i === arr.length-1 ? "last" : ""} ${v > r.linha ? "hit" : "miss"}">${v}</span>`).join("");
     const clique = `abrirDesajusteFoco(${top.indexOf(r)})`;
     const contexto = r.ehTime
       ? (r.nome.includes(" x ") ? r.fx.competicao : `${r.fx.home} x ${r.fx.away}`)
@@ -6061,7 +6062,7 @@ function renderDesajustes(){
           <span style="font-size:10px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:${positivo ? "var(--acc)" : "var(--amber)"}; opacity:.8">${positivo ? "acima da linha" : "abaixo da linha"}</span>
         </span>
       </div>
-      <div class="dj-sub">média ${fmt(r.media, 1)} nos últimos ${r.n} · passou a linha em ${r.hit} de ${r.n}</div>
+      <div class="dj-sub">média ${fmt(r.media, 1)} ${r.sub === "total" ? `em ${r.n} jogos dos dois times` : `nos últimos ${r.n} jogos com dado`} · passou a linha em ${r.hit} de ${r.n}</div>
       <div class="dj-bxs">${barras}</div>
     </button>`;
   };
