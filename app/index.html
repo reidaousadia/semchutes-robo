@@ -6174,12 +6174,11 @@ function renderDesajustes(){
           .filter(([L, o]) => !isNaN(L) && o != null).sort((a, b) => a[0] - b[0]);
         if (!escada.length) continue;
         let linha = null;
-        if (reg.p != null && reg.l[String(reg.p)] >= 1.5) linha = reg.p;
+        if (reg.p != null && reg.l[String(reg.p)] >= 1.5) linha = reg.p;   // principal da casa, se jogável
         else {
           const jogaveis = escada.filter(([L, o]) => o >= 1.5);
-          linha = jogaveis.length
-            ? jogaveis.reduce((a, b) => Math.abs(a[1] - 1.9) < Math.abs(b[1] - 1.9) ? a : b)[0]
-            : escada[escada.length - 1][0];
+          if (!jogaveis.length) continue;          // sem odd jogável → fora
+          linha = jogaveis[0][0];                  // MENOR linha jogável (regra do Pedro)
         }
         // referência = 10 AMOSTRAS VÁLIDAS (busca 15 e completa com dado mais antigo se faltar)
         const hist = (getHistJogador(tid, nome, 15, "geral", fx.ligaId) || [])
@@ -6243,7 +6242,9 @@ function renderDesajustes(){
         for (const [rdir, escada] of direcoes){
           const jogaveis = escada.filter(([L, o]) => o >= 1.5);
           if (!jogaveis.length) continue;
-          const linha = jogaveis.reduce((a, b) => Math.abs(a[1] - 1.9) < Math.abs(b[1] - 1.9) ? a : b)[0];
+          // regra do Pedro: a linha jogável que dá o MAIOR edge na direção
+          // (over = menor linha com odd >=1,50 · under = maior linha com odd >=1,50)
+          const linha = rdir === "over" ? jogaveis[0][0] : jogaveis[jogaveis.length - 1][0];
           const edge = rdir === "over" ? media - linha : linha - media;
           if (edge <= 0) continue;   // sem vantagem na direção da odd real
           const cap = rdir === "under" ? (DJ_CAP_UNDER[meta.chip] ?? (CAP[meta.chip] || 4)) : (CAP[meta.chip] || 4);
