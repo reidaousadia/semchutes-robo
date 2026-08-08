@@ -38,7 +38,8 @@ KEY = acha_chave()
 CASAS = [("betano.bet.br", "betano"), ("bet365", "bet365"), ("estrelabet", "estrela")]
 TORNEIOS = "325,390"          # Série A e B (ids OddsPapi)
 # Player props OddsPapi: market → chave Apitou; outcomes "N+" = linha N-0.5
-M_PROPS = {"10743": "fin", "10753": "chutesGol"}
+M_PROPS = {"10743": "fin", "10753": "chutesGol", "10733": "gols",
+           "102638": "desarmes", "102700": "faltas", "102733": "cartoes"}
 
 def curl(url):
     """urllib toma 403 do Cloudflare — curl passa"""

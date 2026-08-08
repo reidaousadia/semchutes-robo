@@ -5798,8 +5798,13 @@ function renderDesajustes(){
   const statFiltro = state.djStat || "todos";
   const fxPorId = {};
   Object.keys(FIXTURES).forEach(k => { const f = FIXTURES[k]; if (f && f.id != null) fxPorId[String(f.id)] = [k, f]; });
-  const STAT_LBL = { fin: "finalizações", chutesGol: "chutes a gol" };
-  const SEL = { fin: g => g.f, chutesGol: g => g.o };
+  const STAT_LBL = { fin: "finalizações", chutesGol: "chutes a gol", gols: "gols",
+                     desarmes: "desarmes", faltas: "faltas cometidas", cartoes: "cartões" };
+  const SEL = { fin: g => g.f, chutesGol: g => g.o, gols: g => g.g, desarmes: g => g.ds,
+                faltas: g => g.fc, cartoes: g => (g.am != null ? (g.am || 0) + (g.vm || 0) : null) };
+  // desvio máximo plausível por estatística (acima disso = homônimo/erro, não oportunidade)
+  const CAP = { fin: 3, chutesGol: 3, gols: 2, desarmes: 3, faltas: 3, cartoes: 2,
+                tCantos: 4.5, tCartoes: 3, tGols: 2.5 };
   // mesmo jogador pode vir de mais de uma fonte — fica a de maior prioridade
   const PRIO = { betano: 0, bet365: 1, estrela: 2, altenar: 3 };
   const porChave = new Map();
@@ -5822,23 +5827,73 @@ function renderDesajustes(){
         let linha = null;
         if (reg.p != null && reg.l[String(reg.p)] >= 1.5) linha = reg.p;
         else {
-          const jogavel = escada.find(([L, o]) => o >= 1.5);
-          linha = jogavel ? jogavel[0] : escada[escada.length - 1][0];
+          const jogaveis = escada.filter(([L, o]) => o >= 1.5);
+          linha = jogaveis.length
+            ? jogaveis.reduce((a, b) => Math.abs(a[1] - 1.9) < Math.abs(b[1] - 1.9) ? a : b)[0]
+            : escada[escada.length - 1][0];
         }
         const hist = getHistJogador(tid, nome, janela, "geral", fx.ligaId) || [];
         const vals = hist.map(SEL[stat]).filter(v => v != null);
         if (vals.length < 5) continue;
         const media = vals.reduce((a, b) => a + b, 0) / vals.length;
         const edge = media - linha;
-        // sanidade: a casa calibra a linha perto do nível real do jogador — desvio
-        // gigante é match de homônimo errado, não oportunidade (corta > 3)
-        if (Math.abs(edge) > 3) continue;
+        // sanidade: desvio maior que o plausível da estatística = homônimo/erro
+        if (Math.abs(edge) > (CAP[stat] || 3)) continue;
         const chave = `${tid}:${nome}:${stat}`;
         const atual = porChave.get(chave);
         if (atual && (PRIO[atual.casa] ?? 9) <= (PRIO[reg.c] ?? 9)) continue;
         porChave.set(chave, { fi, fx, tid, nome, stat, linha, media, edge, vals,
                               hit: vals.filter(v => v > linha).length, n: vals.length,
                               ehCasa: tid === fx.homeId, casa: reg.c });
+      }
+    }
+  }
+  // ---- linhas de TIME (escanteios / cartões / gols — pedido do Pedro 08/08) ----
+  const T_META = {
+    cantos:  { chip: "tCantos",  lbl: "escanteios",
+               own: j => j.own?.cantos ?? null,
+               tot: j => (j.own?.cantos != null && j.adv?.cantos != null) ? j.own.cantos + j.adv.cantos : null },
+    cartoes: { chip: "tCartoes", lbl: "cartões",
+               own: j => j.own?.amarelos != null ? (j.own.amarelos || 0) + (j.own.vermelhos || 0) : null,
+               tot: j => (j.own?.amarelos != null && j.adv?.amarelos != null)
+                    ? (j.own.amarelos || 0) + (j.own.vermelhos || 0) + (j.adv.amarelos || 0) + (j.adv.vermelhos || 0) : null },
+    gols:    { chip: "tGols",    lbl: "gols",
+               own: j => j.gols ?? null,
+               tot: j => (j.gols != null && j.golsSof != null) ? j.gols + j.golsSof : null },
+  };
+  for (const [fid, jg] of Object.entries(LINHAS.jogos || {})){
+    const par = fxPorId[fid]; if (!par || !jg.time) continue;
+    const [fi, fx] = par;
+    for (const [tipo, subs] of Object.entries(jg.time)){
+      const meta = T_META[tipo]; if (!meta) continue;
+      if (statFiltro !== "todos" && statFiltro !== meta.chip) continue;
+      for (const [sub, ladder] of Object.entries(subs)){
+        const escada = Object.entries(ladder).map(([L, o]) => [parseFloat(L), o])
+          .filter(([L, o]) => !isNaN(L) && o != null).sort((a, b) => a[0] - b[0]);
+        if (!escada.length) continue;
+        const jogaveis = escada.filter(([L, o]) => o >= 1.5);
+        const linha = jogaveis.length
+          ? jogaveis.reduce((a, b) => Math.abs(a[1] - 1.9) < Math.abs(b[1] - 1.9) ? a : b)[0]
+          : escada[escada.length - 1][0];
+        let vals;
+        if (sub === "total"){
+          vals = [...getJogosRx(fx.homeId, fx.ligaId, janela, "geral", null).map(meta.tot),
+                  ...getJogosRx(fx.awayId, fx.ligaId, janela, "geral", null).map(meta.tot)].filter(v => v != null);
+        } else {
+          const tid = sub === "t1" ? fx.homeId : fx.awayId;
+          vals = getJogosRx(tid, fx.ligaId, janela, "geral", null).map(meta.own).filter(v => v != null);
+        }
+        if (vals.length < 5) continue;
+        const media = vals.reduce((a, b) => a + b, 0) / vals.length;
+        const edge = media - linha;
+        if (Math.abs(edge) > (CAP[meta.chip] || 4)) continue;
+        const nome = sub === "total" ? `${fx.home} x ${fx.away}` : sub === "t1" ? fx.home : fx.away;
+        porChave.set(`time:${fid}:${tipo}:${sub}`, {
+          fi, fx, tid: sub === "t2" ? fx.awayId : fx.homeId, nome,
+          stat: meta.chip, statLbl: `${meta.lbl}${sub === "total" ? " na partida" : ""}`,
+          linha, media, edge, vals: vals.slice(0, janela),
+          hit: vals.filter(v => v > linha).length, n: vals.length,
+          ehCasa: sub !== "t2", ehTime: true });
       }
     }
   }
@@ -5854,11 +5909,17 @@ function renderDesajustes(){
     const positivo = r.edge >= 0;
     const barras = [...r.vals].reverse().map((v, i, arr) =>
       `<span class="bx ${i === arr.length-1 ? "last" : ""} ${v > r.linha ? "hit" : ""}">${v}</span>`).join("");
-    return `<button class="dj-row" onclick="abrirDesajuste(${r.fi}, ${r.tid}, '${btoa(unescape(encodeURIComponent(r.nome)))}', '${r.stat}', ${r.linha})">
+    const clique = r.ehTime
+      ? `go('jogo', null, null, null, ${r.fi})`
+      : `abrirDesajuste(${r.fi}, ${r.tid}, '${btoa(unescape(encodeURIComponent(r.nome)))}', '${r.stat}', ${r.linha})`;
+    const contexto = r.ehTime
+      ? (r.nome.includes(" x ") ? r.fx.competicao : `${r.fx.home} x ${r.fx.away}`)
+      : `${r.ehCasa ? r.fx.home : r.fx.away} · ${r.fx.home} x ${r.fx.away}`;
+    return `<button class="dj-row" onclick="${clique}">
       <div class="dj-head"><span class="dj-nome">${r.nome}</span>
-        <span class="dj-time">${r.ehCasa ? r.fx.home : r.fx.away} · ${r.fx.home} x ${r.fx.away}</span></div>
+        <span class="dj-time">${contexto}</span></div>
       <div class="dj-mid">
-        <span class="dj-mercado">Mais de ${String(r.linha).replace(".", ",")} ${STAT_LBL[r.stat]}</span>
+        <span class="dj-mercado">Mais de ${String(r.linha).replace(".", ",")} ${r.statLbl || STAT_LBL[r.stat]}</span>
         <span class="dj-edge tnum" style="color:${positivo ? "var(--acc)" : "var(--amber)"}">${positivo ? "+" : ""}${fmt(r.edge, 1)}</span>
       </div>
       <div class="dj-sub">média ${fmt(r.media, 1)} nos últimos ${r.n} · passou a linha em ${r.hit} de ${r.n}</div>
@@ -5868,7 +5929,7 @@ function renderDesajustes(){
   el.innerHTML = `
     <div class="section-h" style="margin-top:6px"><span class="lbl">Desajustes</span><span class="count tnum">${rows.length} linhas analisadas</span></div>
     <div class="rx-sample" style="margin:2px 0 10px">onde a média do jogador mais destoa da linha típica do jogo — maiores diferenças primeiro${LINHAS.geradoEm ? ` · linhas de ${LINHAS.geradoEm.slice(8,10)}/${LINHAS.geradoEm.slice(5,7)} ${LINHAS.geradoEm.slice(11,16)}` : ""}</div>
-    <div class="filters" style="margin-bottom:6px">${chipS("todos","Todas")}${chipS("fin","Finalizações")}${chipS("chutesGol","Chutes a gol")}</div>
+    <div class="filters" style="margin-bottom:6px">${chipS("todos","Todas")}${chipS("fin","Finalizações")}${chipS("chutesGol","Chutes a gol")}${chipS("gols","Gols")}${chipS("cartoes","Cartões")}${chipS("desarmes","Desarmes")}${chipS("faltas","Faltas")}${chipS("tCantos","Escanteios · time")}${chipS("tCartoes","Cartões · time")}${chipS("tGols","Gols · time")}</div>
     <div class="filters" style="margin-bottom:12px">${chipJ(5)}${chipJ(10)}</div>
     ${top.length ? top.map(linhaHTML).join("")
       : `<div class="empty-box">Sem linhas disponíveis agora — elas abrem perto dos jogos e são atualizadas 3x ao dia.</div>`}

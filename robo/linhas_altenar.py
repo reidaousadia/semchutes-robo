@@ -106,6 +106,8 @@ def coleta_evento(ev_id):
 
     for m in mks:
         nome = str(m.get("name", ""))
+        # variantes por tempo NÃO entram (sobrescreviam a escada do jogo inteiro)
+        if nome.startswith(("1º", "2º")): continue
         # --- mercados de TIME (linhas no próprio market ou nos filhos) ---
         alvo = M_TIME.get(nome)
         lado = None
