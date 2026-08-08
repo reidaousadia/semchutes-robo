@@ -1,0 +1,40 @@
+name: melhor-desajuste
+# Post diário do grupo VIP: calcula o MELHOR desajuste do dia (mesmas regras da
+# aba Desajustes — ver REGRAS.md) e manda a mensagem pronta pro Telegram
+# (@apitoualertas). O Pedro encaminha pro grupo do WhatsApp em 10 segundos —
+# a API oficial do WhatsApp não posta em grupos, e automação não-oficial
+# arrisca banimento do número.
+# 10:50 BRT = 13:50 UTC — depois das coletas da manhã (linhas às x:08 e x:38).
+on:
+  schedule:
+    - cron: "50 13 * * *"
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: baixa dados.js e linhas.js de produção
+        run: |
+          curl -s https://apitou.com.br/dados.js -o app/dados.js
+          curl -s https://apitou.com.br/linhas.js -o app/linhas.js
+      - name: calcula o melhor desajuste do dia e manda pro Telegram
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        run: |
+          node robo/melhor_desajuste.js app > post.txt
+          cat post.txt
+          if grep -q SEM_DESAJUSTE_HOJE post.txt; then
+            echo "sem desajuste hoje — nada a postar"; exit 0
+          fi
+          python3 - <<'EOF'
+          import json, os, urllib.request
+          texto = open("post.txt", encoding="utf-8").read().strip()
+          req = urllib.request.Request(
+              f"https://api.telegram.org/bot{os.environ['TELEGRAM_TOKEN']}/sendMessage",
+              data=json.dumps({"chat_id": "@apitoualertas", "text": texto,
+                               "disable_web_page_preview": True}).encode(),
+              headers={"Content-Type": "application/json"})
+          print(urllib.request.urlopen(req).status)
+          EOF
